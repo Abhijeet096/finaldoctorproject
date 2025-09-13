@@ -1,196 +1,262 @@
-    <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Health Mate - Your Digital Healthcare Companion</title>
-    
-    <!-- External Resources -->
-     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="script.js"></script>
-    
-    
-</head>
-<body>
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="logo">
-                <i class="fas fa-heartbeat"></i>
-                AI Health Mate
-            </div>
-            <ul class="nav-links">
-                <li><a onclick="showSection('home')">Home</a></li>
-                <li><a onclick="showSection('ai-chat')">AI Chat</a></li>
-                <li><a onclick="showSection('video-call')">Video Call</a></li>
-                <li><a onclick="showSection('doctor-login')" class="btn btn-outline">Doctor Login</a></li>
-                <li><a onclick="showSection('patient-login')" class="btn btn-primary">Patient Login</a></li>
-            </ul>
-        </div>
-    </nav>
+        <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI Health Mate - Your Digital Healthcare Companion</title>
 
-    <!-- Home Section -->
-    <section id="home" class="section active">
-        <div class="hero">
-            <div class="hero-content">
-                <div class="hero-text">
-                    <h1>Your AI-Powered Healthcare Companion</h1>
-                    <p>Experience the future of healthcare with AI Health Mate. Get instant symptom analysis, connect with doctors via video calls, and manage your health journey seamlessly.</p>
-                    <div class="hero-buttons">
-                        <a onclick="showSection('ai-chat')" class="btn btn-primary">
-                            <i class="fas fa-robot"></i> Try AI Chat
-                        </a>
-                        <a onclick="showSection('video-call')" class="btn btn-secondary">
-                            <i class="fas fa-video"></i> Start Video Call
-                        </a>
-                    </div>
-                </div>
-                <div class="hero-image">
-                    <i class="fas fa-user-md"></i>
-                </div>
-            </div>
-        </div>
+        <!-- adding chat  open ai -->
 
-        <div class="features">
-            <div class="container">
-                <h2 style="text-align: center; margin-bottom: 3rem; font-size: 2.5rem;">Why Choose AI Health Mate?</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-brain"></i>
-                        </div>
-                        <h3>AI Symptom Analysis</h3>
-                        <p>Advanced AI algorithms analyze your symptoms and provide instant preliminary assessments to guide your healthcare decisions.</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-video"></i>
-                        </div>
-                        <h3>Video Consultations</h3>
-                        <p>Connect with certified doctors through secure video calls from the comfort of your home, available 24/7.</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <i class="fas fa-prescription-bottle-alt"></i>
-                        </div>
-                        <h3>Smart Prescriptions</h3>
-                        <p>Get AI-generated treatment suggestions reviewed and approved by licensed physicians with downloadable prescriptions.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Add this in your HTML head -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-        <!-- Contact Form -->
-        <div class="container" style="margin-top: 4rem;">
-            <h2 style="text-align: center; margin-bottom: 2rem;">Contact Us</h2>
+        
+        <!-- External Resources -->
+        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <script src="script.js"></script>
+        
+        
+    </head>
+    <body>
+
+
+        <!-- Patient Signup Section -->
+    <section id="patient-signup" class="section">
+        <div class="container">
+            <h2 style="text-align: center; margin-bottom: 2rem;">Patient Signup</h2>
             <div class="form-container">
-                <form id="contactForm">
+                <form id="patientSignupForm" onsubmit="handlePatientSignup(event)">
                     <div class="form-group">
-                        <label for="name">Full Name</label>
-                        <input type="text" id="name" name="name" required>
+                        <label for="signupName">Full Name</label>
+                        <input type="text" id="signupName" name="signupName" required>
                     </div>
                     <div class="form-group">
-                        <label for="email">Email Address</label>
-                        <input type="email" id="email" name="email" required>
+                        <label for="signupEmail">Email</label>
+                        <input type="email" id="signupEmail" name="signupEmail" required>
                     </div>
                     <div class="form-group">
-                        <label for="message">Message</label>
-                        <textarea id="message" name="message" rows="4" required></textarea>
+                        <label for="signupPhone">Phone</label>
+                        <input type="text" id="signupPhone" name="signupPhone" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupAge">Age</label>
+                        <input type="number" id="signupAge" name="signupAge" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPassword">Password</label>
+                        <input type="password" id="signupPassword" name="signupPassword" required>
                     </div>
                     <button type="submit" class="btn btn-primary" style="width: 100%;">
-                        <i class="fas fa-paper-plane"></i> Send Message
+                        <i class="fas fa-user-plus"></i> Create Account
                     </button>
                 </form>
+                <p style="text-align: center; margin-top: 1rem;">
+                    <a onclick="showSection('patient-login')" style="color: var(--primary-color); cursor: pointer;">
+                        Already have an account? Login here
+                    </a>
+                </p>
             </div>
         </div>
     </section>
 
-    <!-- AI Chat Section -->
-    <section id="ai-chat" class="section">
-        <div class="container">
-            <h2 style="text-align: center; margin-bottom: 2rem;">AI Symptom Analysis</h2>
-            <div class="chat-container">
-                <div class="chat-header">
-                    <i class="fas fa-robot"></i>
-                    <div>
-                        <h3>AI Health Assistant</h3>
-                        <p style="opacity: 0.8; margin: 0;">Tell me about your symptoms</p>
+
+        <!-- auth script auth.js  -->
+        <!-- // no need still  -->
+
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="logo">
+                    <i class="fas fa-heartbeat"></i>
+                    AI Health Mate
+                </div>
+                <ul class="nav-links">
+                    <li><a onclick="showSection('home')">Home</a></li>
+                    <li><a onclick="showSection('ai-chat')">AI Chat</a></li>
+                    <li><a onclick="showSection('video-call')">Video Call</a></li>
+                    <li><a onclick="showSection('doctor-login')" class="btn btn-outline">Doctor Login</a></li>
+                    <li><a onclick="showSection('patient-login')" class="btn btn-primary">Patient Login</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- Home Section -->
+        <section id="home" class="section active">
+            <div class="hero">
+                <div class="hero-content">
+                    <div class="hero-text">
+                        <h1>Your AI-Powered Healthcare Companion</h1>
+                        <p>Experience the future of healthcare with AI Health Mate. Get instant symptom analysis, connect with doctors via video calls, and manage your health journey seamlessly.</p>
+                        <div class="hero-buttons">
+                            <a onclick="showSection('ai-chat')" class="btn btn-primary">
+                                <i class="fas fa-robot"></i> Try AI Chat
+                            </a>
+                            <a onclick="showSection('video-call')" class="btn btn-secondary">
+                                <i class="fas fa-video"></i> Start Video Call
+                            </a>
+                        </div>
+                    </div>
+                    <div class="hero-image">
+                        <i class="fas fa-user-md"></i>
                     </div>
                 </div>
-                <div class="chat-messages" id="chatMessages">
-                    <div class="message ai">
-                        <div class="message-content">
-                            <p>Hello! I'm your AI Health Assistant. Please describe your symptoms, and I'll provide a preliminary analysis. Remember, this is not a substitute for professional medical advice.</p>
+            </div>
+
+            <div class="features">
+                <div class="container">
+                    <h2 style="text-align: center; margin-bottom: 3rem; font-size: 2.5rem;">Why Choose AI Health Mate?</h2>
+                    <div class="features-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-brain"></i>
+                            </div>
+                            <h3>AI Symptom Analysis</h3>
+                            <p>Advanced AI algorithms analyze your symptoms and provide instant preliminary assessments to guide your healthcare decisions.</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-video"></i>
+                            </div>
+                            <h3>Video Consultations</h3>
+                            <p>Connect with certified doctors through secure video calls from the comfort of your home, available 24/7.</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-prescription-bottle-alt"></i>
+                            </div>
+                            <h3>Smart Prescriptions</h3>
+                            <p>Get AI-generated treatment suggestions reviewed and approved by licensed physicians with downloadable prescriptions.</p>
                         </div>
                     </div>
                 </div>
-                <div class="chat-input">
-                    <div class="input-group">
-                        <input type="text" id="symptomInput" placeholder="Describe your symptoms..." onkeypress="handleChatKeyPress(event)">
-                        <button onclick="sendSymptomMessage()" class="btn btn-primary">
-                            <i class="fas fa-paper-plane"></i>
+            </div>
+
+            <!-- Contact Form -->
+            <div class="container" style="margin-top: 4rem;">
+                <h2 style="text-align: center; margin-bottom: 2rem;">Contact Us</h2>
+                <div class="form-container">
+                    <form id="contactForm">
+                        <div class="form-group">
+                            <label for="name">Full Name</label>
+                            <input type="text" id="name" name="name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email Address</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="message">Message</label>
+                            <textarea id="message" name="message" rows="4" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">
+                            <i class="fas fa-paper-plane"></i> Send Message
                         </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- AI Chat Section -->
+        <section id="ai-chat" class="section">
+            <div class="container">
+                <h2 style="text-align: center; margin-bottom: 2rem;">AI Symptom Analysis</h2>
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <i class="fas fa-robot"></i>
+                        <div>
+                            <h3>AI Health Assistant</h3>
+                            <p style="opacity: 0.8; margin: 0;">Tell me about your symptoms</p>
+                        </div>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message ai">
+                            <div class="message-content">
+                                <p>Hello! I'm your AI Health Assistant. Please describe your symptoms, and I'll provide a preliminary analysis. Remember, this is not a substitute for professional medical advice.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input">
+                        <div class="input-group">
+                            <input type="text" id="symptomInput" placeholder="Describe your symptoms..." onkeypress="handleChatKeyPress(event)">
+                            <button onclick="sendSymptomMessage()" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Video Call Section -->
-    <section id="video-call" class="section">
-        <div class="container">
-            <h2 style="text-align: center; margin-bottom: 2rem;">Video Consultation</h2>
-            <div class="video-container">
-                <h3>Connect with a Doctor</h3>
-                <p>Start a secure video call with one of our certified physicians</p>
-                
-                <div class="video-grid" id="videoGrid">
+        <!-- Video Call Section Zoom -->
+       <!-- Replace your existing video-call section with this updated version -->
+<section id="video-call" class="section">
+    <div class="container">
+        <h2 style="text-align: center; margin-bottom: 2rem;">Video Consultation</h2>
+        <div class="video-container">
+            <h3>Connect with a Doctor</h3>
+            <p>Start a secure video call with one of our certified physicians</p>
+            
+            <div class="video-grid" id="videoGrid">
+                <div class="video-wrapper">
                     <div class="video-placeholder" id="localVideoPlaceholder">
                         <i class="fas fa-user"></i>
                         <p>Your Video</p>
                         <small>Camera access required</small>
                     </div>
+                    <video id="localVideo" autoplay muted playsinline style="display: none;"></video>
+                    <div class="call-quality">
+                        <i class="fas fa-signal quality-excellent"></i>
+                        <span>HD</span>
+                    </div>
+                </div>
+                
+                <div class="video-wrapper">
                     <div class="video-placeholder" id="remoteVideoPlaceholder">
                         <i class="fas fa-user-md"></i>
                         <p>Doctor's Video</p>
                         <small>Waiting for connection</small>
                     </div>
-                </div>
-
-                <div class="video-controls">
-                    <button id="startCallBtn" onclick="startVideoCall()" class="btn btn-primary">
-                        <i class="fas fa-video"></i> Start Call
-                    </button>
-                    <button id="endCallBtn" onclick="endVideoCall()" class="btn" style="background: var(--danger-color); color: white; display: none;">
-                        <i class="fas fa-phone-slash"></i> End Call
-                    </button>
-                    <button id="muteBtn" onclick="toggleMute()" class="btn btn-outline" style="display: none;">
-                        <i class="fas fa-microphone"></i> Mute
-                    </button>
-                    <button id="cameraBtn" onclick="toggleCamera()" class="btn btn-outline" style="display: none;">
-                        <i class="fas fa-video"></i> Camera
-                    </button>
-                </div>
-
-                <div style="margin-top: 2rem; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
-                    <h4><i class="fas fa-info-circle"></i> Video Call Features</h4>
-                    <ul style="margin: 1rem 0; padding-left: 2rem;">
-                        <li>HD video and audio quality</li>
-                        <li>Secure encrypted connection</li>
-                        <li>Screen sharing capability</li>
-                        <li>Call recording (with consent)</li>
-                    </ul>
+                    <video id="remoteVideo" autoplay playsinline style="display: none;"></video>
+                    <div class="video-status" id="connectionStatus">
+                        <i class="fas fa-wifi"></i> Connecting...
+                    </div>
                 </div>
             </div>
-        </div>
-    </section>
 
-    <!-- Doctor Login Section -->
+            <div class="video-controls">
+                <button id="startCallBtn" onclick="startVideoCall()" class="btn btn-primary">
+                    <i class="fas fa-video"></i> Start Call
+                </button>
+                <button id="endCallBtn" onclick="endVideoCall()" class="btn btn-danger" style="display: none;">
+                    <i class="fas fa-phone-slash"></i> End Call
+                </button>
+                <button id="muteBtn" onclick="toggleMute()" class="btn btn-outline" style="display: none;">
+                    <i class="fas fa-microphone"></i> Mute
+                </button>
+                <button id="cameraBtn" onclick="toggleCamera()" class="btn btn-outline" style="display: none;">
+                    <i class="fas fa-video"></i> Camera
+                </button>
+            </div>
+            
+            <div style="margin-top: 2rem; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
+                <h4><i class="fas fa-info-circle"></i> Video Call Features</h4>
+                <ul style="margin: 1rem 0; padding-left: 2rem;">
+                    <li>HD video and audio quality</li>
+                    <li>Secure encrypted connection</li>
+                    <li>Real-time doctor availability</li>
+                    <li>Instant call notifications</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+        <!-- Doctor Login Section -->
     <section id="doctor-login" class="section">
         <div class="container">
             <h2 style="text-align: center; margin-bottom: 2rem;">Doctor Portal</h2>
@@ -198,7 +264,7 @@
                 <div style="text-align: center; margin-bottom: 2rem;">
                     <i class="fas fa-user-md" style="font-size: 4rem; color: var(--primary-color);"></i>
                 </div>
-                <form id="doctorLoginForm">
+                <form id="doctorLoginForm" onsubmit="handleDoctorLogin(event)">
                     <div class="form-group">
                         <label for="doctorEmail">Medical License ID / Email</label>
                         <input type="text" id="doctorEmail" name="doctorEmail" required>
@@ -236,7 +302,7 @@
                 <div style="text-align: center; margin-bottom: 2rem;">
                     <i class="fas fa-user" style="font-size: 4rem; color: var(--primary-color);"></i>
                 </div>
-                <form id="patientLoginForm">
+                <form id="patientLoginForm" onsubmit="handlePatientLogin(event)">
                     <div class="form-group">
                         <label for="patientEmail">Email Address</label>
                         <input type="email" id="patientEmail" name="patientEmail" required>
@@ -256,155 +322,257 @@
         </div>
     </section>
 
-    <!-- Patient Dashboard -->
-    <section id="patient-dashboard" class="section">
-        <div class="container">
-            <h2>Welcome Back, <span id="patientName">Patient</span>!</h2>
-            <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your health journey from your personalized dashboard</p>
-            
-            <div class="dashboard-grid">
-                <div class="dashboard-card">
-                    <h3><i class="fas fa-chart-line"></i> Health Overview</h3>
-                    <div class="stats">
-                        <div class="stat">
-                            <div class="stat-number">12</div>
-                            <div>Consultations</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-number">5</div>
-                            <div>Prescriptions</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-number">98%</div>
-                            <div>Health Score</div>
-                        </div>
+
+        <!-- Patient Dashboard -->
+        <!-- Replace your existing patient-dashboard section with this updated version -->
+<section id="patient-dashboard" class="section">
+    <div class="container">
+        <h2>Welcome Back, <span id="patientName">Patient</span>!</h2>
+        <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your health journey from your personalized dashboard</p>
+        
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <h3><i class="fas fa-chart-line"></i> Health Overview</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number">12</div>
+                        <div>Consultations</div>
                     </div>
-                </div>
-                
-                <div class="dashboard-card">
-                    <h3><i class="fas fa-calendar-alt"></i> Quick Actions</h3>
-                    <div style="display: flex; flex-direction: column; gap: 1rem;">
-                        <button onclick="showSection('ai-chat')" class="btn btn-primary">
-                            <i class="fas fa-robot"></i> Start AI Chat
-                        </button>
-                        <button onclick="showSection('video-call')" class="btn btn-secondary">
-                            <i class="fas fa-video"></i> Video Consultation
-                        </button>
-                        <button onclick="viewPrescriptions()" class="btn btn-outline">
-                            <i class="fas fa-prescription-bottle-alt"></i> View Prescriptions
-                        </button>
+                    <div class="stat">
+                        <div class="stat-number">5</div>
+                        <div>Prescriptions</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">98%</div>
+                        <div>Health Score</div>
                     </div>
                 </div>
             </div>
-
-            <div id="prescriptionsView" style="display: none;">
-                <h3 style="margin: 2rem 0;">Your Prescriptions</h3>
-                <div class="prescription-card">
-                    <div class="prescription-header">
-                        <h4>Prescription #001</h4>
-                        <small>Date: January 15, 2025 | Dr. Smith</small>
-                    </div>
-                    <div class="prescription-content">
-                        <p><strong>Diagnosis:</strong> Common Cold</p>
-                        <p><strong>Medications:</strong></p>
-                        <ul class="medication-list">
-                            <li><strong>Paracetamol 500mg</strong> - Take 1 tablet every 6 hours</li>
-                            <li><strong>Vitamin C 1000mg</strong> - Take 1 tablet daily</li>
-                            <li><strong>Rest and hydration</strong> - Drink plenty of fluids</li>
-                        </ul>
-                        <p><strong>Instructions:</strong> Take medications as prescribed. Rest for 3-5 days.</p>
-                        <div class="prescription-actions">
-                            <button onclick="downloadPrescription('001')" class="btn btn-primary">
-                                <i class="fas fa-download"></i> Download PDF
-                            </button>
-                            <button class="btn btn-outline">
-                                <i class="fas fa-share"></i> Share
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Doctor Dashboard -->
-    <section id="doctor-dashboard" class="section">
-        <div class="container">
-            <h2>Doctor Dashboard - <span id="doctorName">Dr. Smith</span></h2>
-            <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your patients and approve prescriptions</p>
             
-            <div class="dashboard-grid">
-                <div class="dashboard-card">
-                    <h3><i class="fas fa-users"></i> Today's Overview</h3>
-                    <div class="stats">
-                        <div class="stat">
-                            <div class="stat-number">8</div>
-                            <div>Appointments</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-number">3</div>
-                            <div>Pending Reviews</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-number">12</div>
-                            <div>Patients Today</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="dashboard-card">
-                    <h3><i class="fas fa-clock"></i> Status</h3>
-                    <div style="display: flex; align-items: center; gap: 1rem; margin: 1rem 0;">
-                        <div style="width: 12px; height: 12px; background: var(--secondary-color); border-radius: 50%;"></div>
-                        <span>Online - Available</span>
-                    </div>
-                    <button onclick="toggleDoctorStatus()" class="btn btn-outline" style="width: 100%;">
-                        <i class="fas fa-power-off"></i> Go Offline
+            <div class="dashboard-card">
+                <h3><i class="fas fa-calendar-alt"></i> Quick Actions</h3>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <button onclick="showSection('ai-chat')" class="btn btn-primary">
+                        <i class="fas fa-robot"></i> Start AI Chat
+                    </button>
+                    <button onclick="showSection('video-call')" class="btn btn-secondary">
+                        <i class="fas fa-video"></i> Video Consultation
+                    </button>
+                    <button onclick="viewPrescriptions()" class="btn btn-outline">
+                        <i class="fas fa-prescription-bottle-alt"></i> View Prescriptions
                     </button>
                 </div>
             </div>
+        </div>
 
-            <div style="margin-top: 3rem;">
-                <h3>Pending Prescription Approvals</h3>
-                <div class="prescription-card" style="margin-top: 1rem;">
-                    <div class="prescription-header">
-                        <h4>Patient: John Doe</h4>
-                        <small>AI Suggested Prescription | January 25, 2025</small>
+        <!-- Online Doctors Section -->
+        <!-- Replace your existing doctor-dashboard section with this updated version -->
+<section id="doctor-dashboard" class="section">
+    <div class="container">
+        <h2>Doctor Dashboard - <span id="doctorName">Dr. Smith</span></h2>
+        <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your patients and approve prescriptions</p>
+        
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <h3><i class="fas fa-users"></i> Today's Overview</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number">8</div>
+                        <div>Appointments</div>
                     </div>
-                    <div class="prescription-content">
-                        <p><strong>Symptoms:</strong> Headache, fever, body aches</p>
-                        <p><strong>AI Diagnosis:</strong> Viral infection</p>
-                        <p><strong>Suggested Medications:</strong></p>
-                        <ul class="medication-list">
-                            <li><strong>Paracetamol 500mg</strong> - Every 6 hours for pain/fever</li>
-                            <li><strong>Rest</strong> - 2-3 days bed rest</li>
-                            <li><strong>Fluids</strong> - Increase water intake</li>
-                        </ul>
-                        <div class="prescription-actions">
-                            <button onclick="approvePrescription('001')" class="btn btn-secondary">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button onclick="rejectPrescription('001')" class="btn" style="background: var(--danger-color); color: white;">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                            <button onclick="modifyPrescription('001')" class="btn btn-outline">
-                                <i class="fas fa-edit"></i> Modify
-                            </button>
-                        </div>
+                    <div class="stat">
+                        <div class="stat-number">3</div>
+                        <div>Pending Reviews</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number">12</div>
+                        <div>Patients Today</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="dashboard-card">
+                <h3><i class="fas fa-clock"></i> Status</h3>
+                <div style="display: flex; align-items: center; gap: 1rem; margin: 1rem 0;">
+                    <div style="width: 12px; height: 12px; background: var(--secondary-color); border-radius: 50%;"></div>
+                    <span>Online - Available</span>
+                </div>
+                <button onclick="toggleDoctorStatus()" class="btn btn-outline" style="width: 100%;">
+                    <i class="fas fa-power-off"></i> Go Offline
+                </button>
+            </div>
+        </div>
+
+        <!-- Waiting Patients Section -->
+        <div id="waitingPatientsContainer">
+            <h4><i class="fas fa-clock"></i> Waiting Patients (0)</h4>
+            <p style="color: var(--text-light); margin: 1rem 0;">No patients currently waiting for consultation.</p>
+        </div>
+
+        <div style="margin-top: 3rem;">
+            <h3>Pending Prescription Approvals</h3>
+            <div class="prescription-card" style="margin-top: 1rem;">
+                <div class="prescription-header">
+                    <h4>Patient: John Doe</h4>
+                    <small>AI Suggested Prescription | January 25, 2025</small>
+                </div>
+                <div class="prescription-content">
+                    <p><strong>Symptoms:</strong> Headache, fever, body aches</p>
+                    <p><strong>AI Diagnosis:</strong> Viral infection</p>
+                    <p><strong>Suggested Medications:</strong></p>
+                    <ul class="medication-list">
+                        <li><strong>Paracetamol 500mg</strong> - Every 6 hours for pain/fever</li>
+                        <li><strong>Rest</strong> - 2-3 days bed rest</li>
+                        <li><strong>Fluids</strong> - Increase water intake</li>
+                    </ul>
+                    <div class="prescription-actions">
+                        <button onclick="approvePrescription('001')" class="btn btn-secondary">
+                            <i class="fas fa-check"></i> Approve
+                        </button>
+                        <button onclick="rejectPrescription('001')" class="btn btn-danger">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
+                        <button onclick="modifyPrescription('001')" class="btn btn-outline">
+                            <i class="fas fa-edit"></i> Modify
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Logout Button -->
+        <div style="margin-top: 3rem; text-align: center;">
+            <button onclick="logout()" class="btn btn-outline">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+    </div>
+</section>
+
+        <!-- Doctor Signup Section -->
+    <section id="doctor-signup" class="section">
+        <div class="container">
+            <h2 style="text-align: center; margin-bottom: 2rem;">Doctor Signup</h2>
+            <div class="form-container">
+                <form id="doctorSignupForm" onsubmit="handleDoctorSignup(event)">
+                    <div class="form-group">
+                        <label for="doctorSignupName">Full Name</label>
+                        <input type="text" id="doctorSignupName" name="doctorSignupName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupEmail">Email</label>
+                        <input type="email" id="doctorSignupEmail" name="doctorSignupEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupLicense">Medical License ID</label>
+                        <input type="text" id="doctorSignupLicense" name="doctorSignupLicense" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupSpecialty">Specialty</label>
+                        <select id="doctorSignupSpecialty" name="doctorSignupSpecialty" required>
+                            <option value="general">General Medicine</option>
+                            <option value="cardiology">Cardiology</option>
+                            <option value="dermatology">Dermatology</option>
+                            <option value="pediatrics">Pediatrics</option>
+                            <option value="psychiatry">Psychiatry</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupPassword">Password</label>
+                        <input type="password" id="doctorSignupPassword" name="doctorSignupPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </form>
+                <p style="text-align: center; margin-top: 1rem;">
+                    <a onclick="showSection('doctor-login')" style="color: var(--primary-color); cursor: pointer;">
+                        Already have an account? Login here
+                    </a>
+                </p>
+            </div>
+        </div>
     </section>
 
-    <!-- Dark Mode Toggle -->
-    <button class="dark-mode-toggle" onclick="toggleDarkMode()" id="darkModeBtn">
-        <i class="fas fa-moon"></i>
-    </button>
 
-    <!-- Notification Container -->
-    <div id="notification" class="notification"></div>
+        <!-- Doctor Dashboard -->
+        <section id="doctor-dashboard" class="section">
+            <div class="container">
+                <h2>Doctor Dashboard - <span id="doctorName">Dr. Smith</span></h2>
+                <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your patients and approve prescriptions</p>
+                
+                <div class="dashboard-grid">
+                    <div class="dashboard-card">
+                        <h3><i class="fas fa-users"></i> Today's Overview</h3>
+                        <div class="stats">
+                            <div class="stat">
+                                <div class="stat-number">8</div>
+                                <div>Appointments</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-number">3</div>
+                                <div>Pending Reviews</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-number">12</div>
+                                <div>Patients Today</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h3><i class="fas fa-clock"></i> Status</h3>
+                        <div style="display: flex; align-items: center; gap: 1rem; margin: 1rem 0;">
+                            <div style="width: 12px; height: 12px; background: var(--secondary-color); border-radius: 50%;"></div>
+                            <span>Online - Available</span>
+                        </div>
+                        <button onclick="toggleDoctorStatus()" class="btn btn-outline" style="width: 100%;">
+                            <i class="fas fa-power-off"></i> Go Offline
+                        </button>
+                    </div>
+                </div>
 
-    
-</body>
-</html>
+                <div style="margin-top: 3rem;">
+                    <h3>Pending Prescription Approvals</h3>
+                    <div class="prescription-card" style="margin-top: 1rem;">
+                        <div class="prescription-header">
+                            <h4>Patient: John Doe</h4>
+                            <small>AI Suggested Prescription | January 25, 2025</small>
+                        </div>
+                        <div class="prescription-content">
+                            <p><strong>Symptoms:</strong> Headache, fever, body aches</p>
+                            <p><strong>AI Diagnosis:</strong> Viral infection</p>
+                            <p><strong>Suggested Medications:</strong></p>
+                            <ul class="medication-list">
+                                <li><strong>Paracetamol 500mg</strong> - Every 6 hours for pain/fever</li>
+                                <li><strong>Rest</strong> - 2-3 days bed rest</li>
+                                <li><strong>Fluids</strong> - Increase water intake</li>
+                            </ul>
+                            <div class="prescription-actions">
+                                <button onclick="approvePrescription('001')" class="btn btn-secondary">
+                                    <i class="fas fa-check"></i> Approve
+                                </button>
+                                <button onclick="rejectPrescription('001')" class="btn" style="background: var(--danger-color); color: white;">
+                                    <i class="fas fa-times"></i> Reject
+                                </button>
+                                <button onclick="modifyPrescription('001')" class="btn btn-outline">
+                                    <i class="fas fa-edit"></i> Modify
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dark Mode Toggle -->
+        <button class="dark-mode-toggle" onclick="toggleDarkMode()" id="darkModeBtn">
+            <i class="fas fa-moon"></i>
+        </button>
+
+        <!-- Notification Container -->
+        <div id="notification" class="notification"></div>
+
+        
+    </body>
+    </html>
