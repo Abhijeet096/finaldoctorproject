@@ -7,12 +7,14 @@ let remoteStream;
 let peerConnection;
 let isCallActive = false;
 let currentRoomId = null;
+let currentUserId = null;
 
 // WebRTC Configuration
 const rtcConfig = {
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
     ]
 };
 
@@ -42,15 +44,26 @@ function showNotification(message, type = "success") {
 
 // ------------------ Socket.IO Initialization ------------------
 function initializeSocket() {
+    console.log('Initializing socket connection...');
     socket = io('http://localhost:5000');
     
     socket.on('connect', () => {
         console.log('Connected to server:', socket.id);
     });
 
+    socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+    });
+
+    socket.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+        showNotification('Connection error. Please try again.', 'error');
+    });
+
     // Patient receives call acceptance
     socket.on('call-accepted', (data) => {
         const { roomId, doctorName, doctorId } = data;
+        console.log('Call accepted:', data);
         currentRoomId = roomId;
         showNotification(`Dr. ${doctorName} accepted your call!`, 'success');
         updateVideoCallUI('call-accepted');
@@ -60,43 +73,51 @@ function initializeSocket() {
     // Doctor receives call start notification
     socket.on('call-started', (data) => {
         const { roomId, patientId, patientName } = data;
+        console.log('Call started:', data);
         currentRoomId = roomId;
         showNotification(`Call started with ${patientName}`, 'success');
         updateVideoCallUI('call-started');
+        startWebRTCCall(false); // Doctor waits for offer
     });
 
     // Call rejected
     socket.on('call-rejected', (data) => {
-        const { doctorName } = data;
-        showNotification(`Dr. ${doctorName} is busy right now`, 'error');
+        const { doctorName, message } = data;
+        console.log('Call rejected:', data);
+        showNotification(message || `Call rejected`, 'error');
         resetVideoCallUI();
     });
 
     // Incoming call request (for doctors)
     socket.on('incoming-call-request', (data) => {
+        console.log('Incoming call request:', data);
         const { patientId, patientName, requestId } = data;
         showIncomingCallDialog(patientId, patientName, requestId);
     });
 
     // Call was taken by another doctor
     socket.on('call-taken', (data) => {
+        console.log('Call taken by another doctor:', data);
         const { patientId } = data;
         removeCallRequest(patientId);
     });
 
     // Call ended
     socket.on('call-ended', () => {
+        console.log('Call ended by other party');
         endVideoCall();
         showNotification('Call ended', 'info');
     });
 
     // WebRTC signaling events
     socket.on('webrtc-offer', async (data) => {
+        console.log('Received WebRTC offer:', data);
         const { offer, from } = data;
         await handleWebRTCOffer(offer);
     });
 
     socket.on('webrtc-answer', async (data) => {
+        console.log('Received WebRTC answer:', data);
         const { answer, from } = data;
         await handleWebRTCAnswer(answer);
     });
@@ -108,16 +129,18 @@ function initializeSocket() {
 
     // Online doctors update (for patients)
     socket.on('doctors-online', (doctors) => {
+        console.log('Doctors online update:', doctors);
         updateOnlineDoctorsUI(doctors);
     });
 
     // Waiting patients update (for doctors)
     socket.on('waiting-patients', (patients) => {
+        console.log('Waiting patients update:', patients);
         updateWaitingPatientsUI(patients);
     });
 }
 
-// ------------------ Authentication (using in-memory storage) ------------------
+// ------------------ Authentication ------------------
 
 const API_BASE = "http://localhost:5000/api/auth";
 
@@ -158,6 +181,7 @@ async function handlePatientLogin(event) {
         userSession.token = data.token;
         userSession.user = data.user;
         userSession.userType = "patient";
+        currentUserId = data.user._id;
 
         showNotification(`Welcome ${data.user.name}`, "success");
         
@@ -169,11 +193,14 @@ async function handlePatientLogin(event) {
         // Initialize socket connection
         initializeSocket();
         
-        // Join as patient
-        socket.emit('join-as-user', {
-            userId: data.user._id,
-            userType: 'patient',
-            userName: data.user.name
+        // Wait for socket to connect before joining
+        socket.on('connect', () => {
+            console.log('Socket connected, joining as patient...');
+            socket.emit('join-as-user', {
+                userId: data.user._id,
+                userType: 'patient',
+                userName: data.user.name
+            });
         });
         
         showSection('patient-dashboard');
@@ -257,6 +284,7 @@ async function handleDoctorLogin(event) {
         userSession.token = data.token;
         userSession.user = data.user;
         userSession.userType = "doctor";
+        currentUserId = data.user._id;
 
         showNotification(`Welcome Dr. ${data.user.name}`, "success");
         
@@ -268,11 +296,14 @@ async function handleDoctorLogin(event) {
         // Initialize socket connection
         initializeSocket();
         
-        // Join as doctor
-        socket.emit('join-as-user', {
-            userId: data.user._id,
-            userType: 'doctor',
-            userName: data.user.name
+        // Wait for socket to connect before joining
+        socket.on('connect', () => {
+            console.log('Socket connected, joining as doctor...');
+            socket.emit('join-as-user', {
+                userId: data.user._id,
+                userType: 'doctor',
+                userName: data.user.name
+            });
         });
         
         showSection('doctor-dashboard');
@@ -340,6 +371,7 @@ function logout() {
         user: null,
         userType: null
     };
+    currentUserId = null;
     showNotification("Logged out successfully");
     showSection("home");
 }
@@ -348,38 +380,67 @@ function logout() {
 
 // Patient requests video call
 async function startVideoCall() {
+    console.log('Starting video call...');
+    
     if (!socket || !userSession.user) {
         showNotification("Please login first", "error");
         return;
     }
 
-    if (userSession.userType !== 'patient') {
-        showNotification("Only patients can initiate calls", "error");
+    if (!socket.connected) {
+        showNotification("Connection lost. Please refresh and try again.", "error");
         return;
     }
 
     try {
-        // Get user media
+        // Get user media with better constraints
         localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                frameRate: { ideal: 30 }
+            }, 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
         });
+        
+        console.log('Got local stream');
         
         // Show local video
         displayLocalVideo();
         
-        // Request call to doctors
-        socket.emit('request-video-call', {
-            patientId: userSession.user._id,
-            patientName: userSession.user.name
-        });
-        
-        showNotification("Requesting video call with available doctors...", "info");
-        updateVideoCallUI('requesting');
+        // Only patients should request calls to doctors
+        if (userSession.userType === 'patient') {
+            console.log('Sending video call request...');
+            socket.emit('request-video-call', {
+                patientId: userSession.user._id,
+                patientName: userSession.user.name
+            });
+            
+            showNotification("Requesting video call with available doctors...", "info");
+            updateVideoCallUI('requesting');
+        } else if (userSession.userType === 'doctor') {
+            showNotification("Video call started. Waiting for patient...", "info");
+            updateVideoCallUI('call-started');
+        }
         
     } catch (err) {
         console.error("Video call error:", err);
-        showNotification("Could not access camera/microphone", "error");
+        let errorMessage = "Could not access camera/microphone";
+        
+        if (err.name === 'NotAllowedError') {
+            errorMessage = "Camera/microphone access denied. Please allow permissions and try again.";
+        } else if (err.name === 'NotFoundError') {
+            errorMessage = "No camera or microphone found. Please check your devices.";
+        } else if (err.name === 'NotReadableError') {
+            errorMessage = "Camera or microphone is already in use by another application.";
+        }
+        
+        showNotification(errorMessage, "error");
+        resetVideoCallUI();
     }
 }
 
@@ -392,6 +453,9 @@ function displayLocalVideo() {
         localVideo.srcObject = localStream;
         localVideo.style.display = "block";
         if (placeholder) placeholder.style.display = "none";
+        
+        console.log('Local video displayed');
+        updateConnectionStatus("Connected");
     }
 }
 
@@ -404,86 +468,143 @@ function displayRemoteVideo() {
         remoteVideo.srcObject = remoteStream;
         remoteVideo.style.display = "block";
         if (placeholder) placeholder.style.display = "none";
+        
+        console.log('Remote video displayed');
+        updateConnectionStatus("Call Active");
+    }
+}
+
+// Update connection status
+function updateConnectionStatus(status) {
+    const statusEl = document.getElementById("connectionStatus");
+    if (statusEl) {
+        statusEl.innerHTML = `<i class="fas fa-wifi"></i> ${status}`;
     }
 }
 
 // Start WebRTC connection
 async function startWebRTCCall(isInitiator) {
-    peerConnection = new RTCPeerConnection(rtcConfig);
+    console.log('Starting WebRTC call, initiator:', isInitiator);
     
-    // Add local stream to peer connection
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            peerConnection.addTrack(track, localStream);
-        });
-    }
-    
-    // Handle remote stream
-    peerConnection.ontrack = (event) => {
-        remoteStream = event.streams[0];
-        displayRemoteVideo();
-    };
-    
-    // Handle ICE candidates
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate && socket && currentRoomId) {
-            socket.emit('webrtc-ice-candidate', {
-                roomId: currentRoomId,
-                candidate: event.candidate
+    try {
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        
+        // Add local stream to peer connection
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                console.log('Adding track to peer connection');
+                peerConnection.addTrack(track, localStream);
             });
         }
-    };
-    
-    if (isInitiator) {
-        // Create offer
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
         
-        socket.emit('webrtc-offer', {
-            roomId: currentRoomId,
-            offer: offer
-        });
+        // Handle remote stream
+        peerConnection.ontrack = (event) => {
+            console.log("Received remote stream");
+            remoteStream = event.streams[0];
+            displayRemoteVideo();
+        };
+        
+        // Handle ICE candidates
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate && socket && currentRoomId) {
+                console.log("Sending ICE candidate");
+                socket.emit('webrtc-ice-candidate', {
+                    roomId: currentRoomId,
+                    candidate: event.candidate
+                });
+            }
+        };
+        
+        // Handle connection state changes
+        peerConnection.onconnectionstatechange = () => {
+            console.log("Connection state:", peerConnection.connectionState);
+            updateConnectionStatus(peerConnection.connectionState);
+        };
+        
+        if (isInitiator) {
+            // Create offer
+            console.log('Creating offer...');
+            const offer = await peerConnection.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: true
+            });
+            await peerConnection.setLocalDescription(offer);
+            
+            console.log("Sending offer");
+            socket.emit('webrtc-offer', {
+                roomId: currentRoomId,
+                offer: offer
+            });
+        }
+        
+        isCallActive = true;
+        
+    } catch (error) {
+        console.error("Error starting WebRTC call:", error);
+        showNotification("Failed to start video call", "error");
+        resetVideoCallUI();
     }
-    
-    isCallActive = true;
 }
 
 // Handle WebRTC offer
 async function handleWebRTCOffer(offer) {
-    if (!peerConnection) {
-        await startWebRTCCall(false);
+    try {
+        if (!peerConnection) {
+            await startWebRTCCall(false);
+        }
+        
+        console.log("Received offer, setting remote description");
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        console.log("Sending answer");
+        socket.emit('webrtc-answer', {
+            roomId: currentRoomId,
+            answer: answer
+        });
+        
+    } catch (error) {
+        console.error("Error handling WebRTC offer:", error);
+        showNotification("Failed to handle call offer", "error");
     }
-    
-    await peerConnection.setRemoteDescription(offer);
-    
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    
-    socket.emit('webrtc-answer', {
-        roomId: currentRoomId,
-        answer: answer
-    });
 }
 
 // Handle WebRTC answer
 async function handleWebRTCAnswer(answer) {
-    if (peerConnection) {
-        await peerConnection.setRemoteDescription(answer);
+    try {
+        if (peerConnection) {
+            console.log("Received answer, setting remote description");
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+    } catch (error) {
+        console.error("Error handling WebRTC answer:", error);
+        showNotification("Failed to handle call answer", "error");
     }
 }
 
 // Handle ICE candidate
 async function handleICECandidate(candidate) {
-    if (peerConnection) {
-        await peerConnection.addIceCandidate(candidate);
+    try {
+        if (peerConnection && peerConnection.remoteDescription) {
+            console.log("Adding ICE candidate");
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+    } catch (error) {
+        console.error("Error handling ICE candidate:", error);
     }
 }
 
 // End video call
 function endVideoCall() {
+    console.log('Ending video call...');
+    
     // Stop local stream
     if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach(track => {
+            track.stop();
+        });
         localStream = null;
     }
     
@@ -505,7 +626,7 @@ function endVideoCall() {
     currentRoomId = null;
     
     resetVideoCallUI();
-    showNotification("Call ended", "info");
+    updateConnectionStatus("Disconnected");
 }
 
 // Update video call UI based on state
@@ -515,22 +636,28 @@ function updateVideoCallUI(state) {
     const muteBtn = document.getElementById("muteBtn");
     const cameraBtn = document.getElementById("cameraBtn");
     
+    console.log('Updating UI state:', state);
+    
     switch(state) {
         case 'requesting':
-            startBtn.style.display = "none";
-            endBtn.style.display = "inline-block";
-            endBtn.innerHTML = '<i class="fas fa-times"></i> Cancel Request';
-            muteBtn.style.display = "inline-block";
-            cameraBtn.style.display = "inline-block";
+            if (startBtn) startBtn.style.display = "none";
+            if (endBtn) {
+                endBtn.style.display = "inline-block";
+                endBtn.innerHTML = '<i class="fas fa-times"></i> Cancel Request';
+            }
+            if (muteBtn) muteBtn.style.display = "inline-block";
+            if (cameraBtn) cameraBtn.style.display = "inline-block";
             break;
             
         case 'call-accepted':
         case 'call-started':
-            startBtn.style.display = "none";
-            endBtn.style.display = "inline-block";
-            endBtn.innerHTML = '<i class="fas fa-phone-slash"></i> End Call';
-            muteBtn.style.display = "inline-block";
-            cameraBtn.style.display = "inline-block";
+            if (startBtn) startBtn.style.display = "none";
+            if (endBtn) {
+                endBtn.style.display = "inline-block";
+                endBtn.innerHTML = '<i class="fas fa-phone-slash"></i> End Call';
+            }
+            if (muteBtn) muteBtn.style.display = "inline-block";
+            if (cameraBtn) cameraBtn.style.display = "inline-block";
             break;
     }
 }
@@ -551,8 +678,14 @@ function resetVideoCallUI() {
     if (muteBtn) muteBtn.style.display = "none";
     if (cameraBtn) cameraBtn.style.display = "none";
     
-    if (localVideo) localVideo.style.display = "none";
-    if (remoteVideo) remoteVideo.style.display = "none";
+    if (localVideo) {
+        localVideo.style.display = "none";
+        localVideo.srcObject = null;
+    }
+    if (remoteVideo) {
+        remoteVideo.style.display = "none";
+        remoteVideo.srcObject = null;
+    }
     if (localPlaceholder) localPlaceholder.style.display = "block";
     if (remotePlaceholder) remotePlaceholder.style.display = "block";
 }
@@ -563,9 +696,13 @@ function toggleMute() {
         const audioTrack = localStream.getAudioTracks()[0];
         if (audioTrack) {
             audioTrack.enabled = !audioTrack.enabled;
-            document.getElementById("muteBtn").innerHTML = audioTrack.enabled ? 
-                '<i class="fas fa-microphone"></i> Mute' : 
-                '<i class="fas fa-microphone-slash"></i> Unmute';
+            const muteBtn = document.getElementById("muteBtn");
+            if (muteBtn) {
+                muteBtn.innerHTML = audioTrack.enabled ? 
+                    '<i class="fas fa-microphone"></i> Mute' : 
+                    '<i class="fas fa-microphone-slash"></i> Unmute';
+            }
+            showNotification(audioTrack.enabled ? "Microphone unmuted" : "Microphone muted", "info");
         }
     }
 }
@@ -576,15 +713,21 @@ function toggleCamera() {
         const videoTrack = localStream.getVideoTracks()[0];
         if (videoTrack) {
             videoTrack.enabled = !videoTrack.enabled;
-            document.getElementById("cameraBtn").innerHTML = videoTrack.enabled ? 
-                '<i class="fas fa-video"></i> Camera' : 
-                '<i class="fas fa-video-slash"></i> Camera';
+            const cameraBtn = document.getElementById("cameraBtn");
+            if (cameraBtn) {
+                cameraBtn.innerHTML = videoTrack.enabled ? 
+                    '<i class="fas fa-video"></i> Camera' : 
+                    '<i class="fas fa-video-slash"></i> Camera';
+            }
+            showNotification(videoTrack.enabled ? "Camera turned on" : "Camera turned off", "info");
         }
     }
 }
 
 // Show incoming call dialog for doctors
 function showIncomingCallDialog(patientId, patientName, requestId) {
+    console.log('Showing incoming call dialog:', { patientId, patientName, requestId });
+    
     // Remove existing dialog if any
     const existingDialog = document.getElementById('incomingCallDialog');
     if (existingDialog) {
@@ -597,7 +740,7 @@ function showIncomingCallDialog(patientId, patientName, requestId) {
     dialog.innerHTML = `
         <div class="call-dialog-content">
             <div class="call-dialog-header">
-                <i class="fas fa-video"></i>
+                <i class="fas fa-video pulse"></i>
                 <h3>Incoming Video Call</h3>
             </div>
             <div class="call-dialog-body">
@@ -615,6 +758,15 @@ function showIncomingCallDialog(patientId, patientName, requestId) {
     `;
     
     document.body.appendChild(dialog);
+    
+    // Auto-reject after 30 seconds
+    setTimeout(() => {
+        const stillExists = document.getElementById('incomingCallDialog');
+        if (stillExists) {
+            console.log('Auto-rejecting call after timeout');
+            rejectCall(patientId);
+        }
+    }, 30000);
 }
 
 // Remove call request dialog
@@ -622,20 +774,32 @@ function removeCallRequest(patientId) {
     const dialog = document.getElementById('incomingCallDialog');
     if (dialog) {
         dialog.remove();
+        console.log('Call request dialog removed');
     }
 }
 
 // Doctor accepts call
 async function acceptCall(patientId, patientName) {
+    console.log('Doctor accepting call from:', patientName);
+    
     try {
         // Get user media
         localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: true 
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                frameRate: { ideal: 30 }
+            }, 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
         });
         
         displayLocalVideo();
         
+        console.log('Emitting accept-call...');
         socket.emit('accept-call', {
             patientId: patientId,
             doctorId: userSession.user._id,
@@ -650,16 +814,27 @@ async function acceptCall(patientId, patientName) {
         
     } catch (err) {
         console.error("Error accepting call:", err);
-        showNotification("Could not access camera/microphone", "error");
+        let errorMessage = "Could not access camera/microphone";
+        
+        if (err.name === 'NotAllowedError') {
+            errorMessage = "Camera/microphone access denied. Please allow permissions and try again.";
+        }
+        
+        showNotification(errorMessage, "error");
+        removeCallRequest(patientId);
     }
 }
 
 // Doctor rejects call
 function rejectCall(patientId) {
-    socket.emit('reject-call', {
-        patientId: patientId,
-        doctorId: userSession.user._id
-    });
+    console.log('Doctor rejecting call from patient:', patientId);
+    
+    if (socket) {
+        socket.emit('reject-call', {
+            patientId: patientId,
+            doctorId: userSession.user._id
+        });
+    }
     
     removeCallRequest(patientId);
     showNotification("Call request rejected", "info");
@@ -670,17 +845,22 @@ function updateOnlineDoctorsUI(doctors) {
     const container = document.getElementById('onlineDoctorsContainer');
     if (!container) return;
     
+    console.log('Updating online doctors UI:', doctors);
+    
     container.innerHTML = `
         <h4><i class="fas fa-user-md"></i> Available Doctors (${doctors.length})</h4>
-        ${doctors.map(doctor => `
-            <div class="doctor-item">
-                <div class="doctor-info">
-                    <i class="fas fa-circle ${doctor.status === 'online' ? 'online' : 'busy'}"></i>
-                    ${doctor.name}
+        ${doctors.length === 0 ? 
+            '<p style="color: var(--text-light); margin: 1rem 0;">No doctors currently online.</p>' :
+            doctors.map(doctor => `
+                <div class="doctor-item">
+                    <div class="doctor-info">
+                        <i class="fas fa-circle ${doctor.status === 'online' ? 'online' : 'busy'}"></i>
+                        Dr. ${doctor.name} (${doctor.specialty || 'General'})
+                    </div>
+                    <span class="doctor-status">${doctor.status}</span>
                 </div>
-                <span class="doctor-status">${doctor.status}</span>
-            </div>
-        `).join('')}
+            `).join('')
+        }
     `;
 }
 
@@ -689,25 +869,32 @@ function updateWaitingPatientsUI(patients) {
     const container = document.getElementById('waitingPatientsContainer');
     if (!container) return;
     
+    console.log('Updating waiting patients UI:', patients);
+    
     container.innerHTML = `
         <h4><i class="fas fa-clock"></i> Waiting Patients (${patients.length})</h4>
-        ${patients.map(patient => `
-            <div class="patient-item">
-                <div class="patient-info">
-                    <i class="fas fa-user"></i>
-                    ${patient.name}
+        ${patients.length === 0 ? 
+            '<p style="color: var(--text-light); margin: 1rem 0;">No patients currently waiting for consultation.</p>' :
+            patients.map(patient => `
+                <div class="patient-item">
+                    <div class="patient-info">
+                        <i class="fas fa-user"></i>
+                        ${patient.name}
+                    </div>
+                    <button onclick="acceptCall('${patient.id}', '${patient.name}')" class="btn btn-sm btn-primary">
+                        Accept Call
+                    </button>
                 </div>
-                <button onclick="acceptCall('${patient.id}', '${patient.name}')" class="btn btn-sm btn-primary">
-                    Accept Call
-                </button>
-            </div>
-        `).join('')}
+            `).join('')
+        }
     `;
 }
 
 // ------------------ Chat Functions ------------------
 function sendSymptomMessage() {
     const input = document.getElementById("symptomInput");
+    if (!input) return;
+    
     const message = input.value.trim();
     if (!message) return;
 
@@ -718,7 +905,9 @@ function sendSymptomMessage() {
     const loadingMsg = appendMessage("ai", "Analyzing your symptoms...");
     
     setTimeout(() => {
-        loadingMsg.remove();
+        if (loadingMsg.parentNode) {
+            loadingMsg.remove();
+        }
         appendMessage("ai", "Based on your symptoms, I recommend rest and hydration. However, please consult with a healthcare professional for proper diagnosis. Would you like to schedule a video consultation?");
     }, 2000);
 }
@@ -731,6 +920,8 @@ function handleChatKeyPress(event) {
 
 function appendMessage(sender, text) {
     const chatBox = document.getElementById("chatMessages");
+    if (!chatBox) return null;
+    
     const msg = document.createElement("div");
     msg.className = `message ${sender}`;
     msg.innerHTML = `<div class="message-content">${text}</div>`;
@@ -781,8 +972,11 @@ function showDoctorSignup() {
 function toggleDarkMode() {
     document.body.classList.toggle("dark-mode");
     const isDark = document.body.classList.contains("dark-mode");
-    document.getElementById("darkModeBtn").innerHTML = isDark ? 
-        '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    const darkModeBtn = document.getElementById("darkModeBtn");
+    if (darkModeBtn) {
+        darkModeBtn.innerHTML = isDark ? 
+            '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    }
 }
 
 // ------------------ Contact Form ------------------
@@ -795,4 +989,174 @@ document.addEventListener('DOMContentLoaded', function() {
             contactForm.reset();
         });
     }
+});
+
+// ------------------ Additional Utility Functions ------------------
+
+// Check if user is logged in
+function isLoggedIn() {
+    return userSession.user !== null && userSession.token !== null;
+}
+
+// Get current user info
+function getCurrentUser() {
+    return userSession.user;
+}
+
+// Check connection status
+function checkConnectionStatus() {
+    if (!socket) {
+        return 'disconnected';
+    }
+    return socket.connected ? 'connected' : 'disconnected';
+}
+
+// Reconnect socket if disconnected
+function reconnectSocket() {
+    if (socket && !socket.connected && isLoggedIn()) {
+        console.log('Attempting to reconnect...');
+        socket.connect();
+    }
+}
+
+// Handle page refresh - maintain session if possible
+window.addEventListener('beforeunload', function(e) {
+    if (isCallActive) {
+        e.preventDefault();
+        e.returnValue = 'You are currently in a video call. Are you sure you want to leave?';
+        return e.returnValue;
+    }
+});
+
+// Handle page visibility change - pause/resume video when tab is hidden/shown
+document.addEventListener('visibilitychange', function() {
+    if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            if (document.hidden) {
+                console.log('Page hidden, pausing video');
+            } else {
+                console.log('Page visible, resuming video');
+            }
+        }
+    }
+});
+
+// Network connection monitoring
+window.addEventListener('online', function() {
+    console.log('Network connection restored');
+    showNotification('Connection restored', 'success');
+    reconnectSocket();
+});
+
+window.addEventListener('offline', function() {
+    console.log('Network connection lost');
+    showNotification('Connection lost. Please check your internet.', 'error');
+});
+
+// Error handler for unhandled promise rejections
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('Unhandled promise rejection:', event.reason);
+    // Don't show notification for every unhandled rejection to avoid spam
+    // showNotification('An unexpected error occurred', 'error');
+});
+
+// Global error handler
+window.addEventListener('error', function(event) {
+    console.error('Global error:', event.error);
+    // Log error but don't show notification unless it's critical
+});
+
+// Cleanup function when page unloads
+window.addEventListener('unload', function() {
+    if (socket) {
+        socket.disconnect();
+    }
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+    }
+    if (peerConnection) {
+        peerConnection.close();
+    }
+});
+
+// Initialize notification system
+function initializeNotifications() {
+    // Request notification permission for browser notifications
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+// Show browser notification for incoming calls (when tab is not active)
+function showBrowserNotification(title, body, onclick) {
+    if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+        const notification = new Notification(title, {
+            body: body,
+            icon: '/favicon.ico', // Add your app icon
+            badge: '/favicon.ico',
+            tag: 'video-call',
+            requireInteraction: true
+        });
+        
+        notification.onclick = function() {
+            window.focus();
+            if (onclick) onclick();
+            notification.close();
+        };
+        
+        // Auto close after 10 seconds
+        setTimeout(() => notification.close(), 10000);
+    }
+}
+
+// Enhanced incoming call dialog with sound notification
+function showIncomingCallDialogEnhanced(patientId, patientName, requestId) {
+    console.log('Showing enhanced incoming call dialog:', { patientId, patientName, requestId });
+    
+    // Play notification sound if available
+    try {
+        // Create audio element for call notification sound
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmkaATiF0fPQgjIGIXPI8dyJOQgSUM/t559NEAxJsuPxtmMcBBmDwO3MeSUFJHfH8N2QQAoUYrTp66hVFAwZfeDx');
+        audio.play().catch(e => console.log('Could not play notification sound'));
+    } catch (e) {
+        console.log('Audio notification not supported');
+    }
+    
+    // Show browser notification if tab is not active
+    showBrowserNotification(
+        'Incoming Video Call',
+        `${patientName} is requesting a video consultation`,
+        () => {
+            // Focus on the call dialog when notification is clicked
+            const dialog = document.getElementById('incomingCallDialog');
+            if (dialog) {
+                dialog.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    );
+    
+    // Show the regular dialog
+    showIncomingCallDialog(patientId, patientName, requestId);
+}
+
+// Initialize app when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing app...');
+    
+    // Initialize notification system
+    initializeNotifications();
+    
+    // Check for existing session (if implementing persistent sessions)
+    // This would require storing session info in localStorage or cookies
+    
+    // Set up periodic connection check
+    setInterval(() => {
+        if (isLoggedIn() && (!socket || !socket.connected)) {
+            console.log('Connection lost, attempting to reconnect...');
+            reconnectSocket();
+        }
+    }, 30000); // Check every 30 seconds
+    
+    console.log('App initialization complete');
 });
