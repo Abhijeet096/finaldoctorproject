@@ -894,4 +894,346 @@
     background: var(--bg-white);
 }
             
+
+/* Additional CSS for Video Call Features */
+
+/* Incoming Call Dialog */
+.incoming-call-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.call-dialog-content {
+    background: white;
+    border-radius: 1rem;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+    animation: slideIn 0.3s ease;
+}
+
+.call-dialog-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.call-dialog-header i {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.call-dialog-body p {
+    text-align: center;
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+}
+
+.call-dialog-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Doctor/Patient Items */
+.doctor-item, .patient-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: white;
+}
+
+.doctor-info, .patient-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.doctor-info i.fas.fa-circle {
+    font-size: 0.8rem;
+}
+
+.doctor-info i.online {
+    color: var(--secondary-color);
+}
+
+.doctor-info i.busy {
+    color: var(--accent-color);
+}
+
+.doctor-status {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    text-transform: capitalize;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* Video Container Improvements */
+.video-container {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    padding: 2rem;
+    text-align: center;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.video-placeholder {
+    background: var(--bg-light);
+    border-radius: 1rem;
+    padding: 4rem 2rem;
+    border: 2px dashed var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    min-height: 300px;
+    justify-content: center;
+}
+
+.video-placeholder i {
+    font-size: 4rem;
+    color: var(--text-light);
+}
+
+.video-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin: 2rem 0;
+    flex-wrap: wrap;
+}
+
+/* Connection Status */
+#connectionStatus {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* Waiting Patients/Online Doctors Containers */
+#waitingPatientsContainer,
+#onlineDoctorsContainer {
+    background: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+}
+
+#waitingPatientsContainer h4,
+#onlineDoctorsContainer h4 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-light);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Animation for slide in */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Video call status indicators */
+.call-status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+}
+
+.call-status.requesting {
+    background: var(--accent-color);
+    color: white;
+}
+
+.call-status.active {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.call-status.ended {
+    background: var(--text-light);
+    color: white;
+}
+
+/* Responsive improvements for video call */
+@media (max-width: 768px) {
+    .video-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .call-dialog-content {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+    
+    .call-dialog-actions {
+        flex-direction: column;
+    }
+    
+    .call-dialog-actions .btn {
+        width: 100%;
+    }
+    
+    .video-controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .video-controls .btn {
+        width: 200px;
+    }
+    
+    .doctor-item,
+    .patient-item {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+}
+
+/* Loading animation for waiting states */
+.loading-dots {
+    display: inline-block;
+}
+
+.loading-dots::after {
+    content: '';
+    animation: dots 1.5s steps(5, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}
+
+/* Pulse animation for incoming calls */
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Video quality indicators */
+.quality-indicator {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+}
+
+.quality-good {
+    color: var(--secondary-color);
+}
+
+.quality-medium {
+    color: var(--accent-color);
+}
+
+.quality-poor {
+    color: var(--danger-color);
+}
+
+/* Call duration timer */
+.call-duration {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--primary-color);
+    background: var(--bg-light);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+}
+
+/* Mute/Camera off indicators */
+.media-indicator {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    display: none;
+}
+
+.media-indicator.show {
+    display: block;
+}
         
