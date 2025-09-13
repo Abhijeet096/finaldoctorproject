@@ -1,4 +1,3 @@
-require('dotenv').config();
 const mongoose = require("mongoose");
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -6,13 +5,12 @@ const cors = require("cors");
 const bcrypt = require('bcrypt');
 const http = require('http');
 const socketIo = require('socket.io');
-const { v4: uuidv4 } = require('uuid');
 
 const Patient = require("./models/Patient");
 const Doctor = require("./models/Doctor");
 
 // Connect to MongoDB
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = "mongodb+srv://tradeabhiyt_db_user:KDHHiZHhRsRrD6fN@aihealthmatecluster.ryau30r.mongodb.net/?retryWrites=true&w=majority&appName=AIHealthMateCluster";
 
 mongoose.connect(MONGO_URI, {
     useNewUrlParser: true,
@@ -30,176 +28,299 @@ const io = socketIo(server, {
     }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// Store online users and call rooms
-const onlineUsers = new Map(); // userId -> socketId
-const callRooms = new Map(); // roomId -> { patientId, doctorId, status }
-const onlineDoctors = new Set(); // Set of online doctor IDs
+// Store online users and call requests
+const onlineUsers = new Map(); // userId -> socket info
+const onlineDoctors = new Map(); // doctorId -> doctor info
+const onlinePatients = new Map(); // patientId -> patient info
+const activeCallRequests = new Map(); // requestId -> call info
+const activeCalls = new Map(); // roomId -> call info
 
-// ---------------- Socket.IO Video Call Logic ----------------
+// ---------------- Socket.IO Events ----------------
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    // User joins as patient or doctor
+    // User joins (patient or doctor)
     socket.on('join-as-user', (data) => {
         const { userId, userType, userName } = data;
-        onlineUsers.set(userId, { 
-            socketId: socket.id, 
-            userType, 
+        
+        console.log(`User joining: ${userName} as ${userType} with ID: ${userId}`);
+        
+        // Store user info
+        onlineUsers.set(userId, {
+            socketId: socket.id,
+            userType,
             userName,
             status: 'online'
         });
-        
+
+        socket.userId = userId;
+        socket.userType = userType;
+        socket.userName = userName;
+
         if (userType === 'doctor') {
-            onlineDoctors.add(userId);
-            // Send current waiting patients to newly connected doctor
-            socket.emit('waiting-patients', Array.from(onlineUsers.entries())
-                .filter(([id, user]) => user.userType === 'patient' && user.status === 'waiting')
-                .map(([id, user]) => ({ id, name: user.userName }))
-            );
+            onlineDoctors.set(userId, {
+                id: userId,
+                name: userName,
+                status: 'online',
+                socketId: socket.id
+            });
+            
+            console.log(`Doctor ${userName} joined. Online doctors: ${onlineDoctors.size}`);
+            console.log('Current online doctors:', Array.from(onlineDoctors.keys()));
+            
+            // Send waiting patients to this doctor
+            const waitingPatients = Array.from(activeCallRequests.values())
+                .filter(req => req.status === 'waiting')
+                .map(req => ({
+                    id: req.patientId,
+                    name: req.patientName,
+                    requestId: req.requestId
+                }));
+            
+            socket.emit('waiting-patients', waitingPatients);
+            
+        } else if (userType === 'patient') {
+            onlinePatients.set(userId, {
+                id: userId,
+                name: userName,
+                socketId: socket.id
+            });
+            
+            console.log(`Patient ${userName} joined. Online patients: ${onlinePatients.size}`);
+            
+            // Send online doctors to this patient
+            const doctorsList = Array.from(onlineDoctors.values());
+            socket.emit('doctors-online', doctorsList);
         }
-        
-        console.log(`${userType} ${userName} joined with ID: ${userId}`);
-        
-        // Broadcast online doctors to all patients
-        if (userType === 'doctor') {
-            io.emit('doctors-online', Array.from(onlineUsers.entries())
-                .filter(([id, user]) => user.userType === 'doctor')
-                .map(([id, user]) => ({ id, name: user.userName, status: user.status }))
-            );
-        }
+
+        // Broadcast updated lists to all users
+        broadcastOnlineDoctors();
+        broadcastWaitingPatients();
     });
 
     // Patient requests video call
     socket.on('request-video-call', (data) => {
         const { patientId, patientName } = data;
         
-        // Update patient status to waiting
-        if (onlineUsers.has(patientId)) {
-            onlineUsers.get(patientId).status = 'waiting';
-        }
+        console.log(`Video call request from ${patientName} (${patientId})`);
+        console.log(`Available doctors: ${onlineDoctors.size}`);
         
-        // Broadcast to all online doctors
-        onlineUsers.forEach((user, userId) => {
-            if (user.userType === 'doctor') {
-                io.to(user.socketId).emit('incoming-call-request', {
+        if (onlineDoctors.size === 0) {
+            console.log('No doctors online, rejecting call');
+            socket.emit('call-rejected', {
+                doctorName: 'System',
+                message: 'No doctors currently online'
+            });
+            return;
+        }
+
+        const requestId = `req_${Date.now()}_${patientId}`;
+        const callRequest = {
+            requestId,
+            patientId,
+            patientName,
+            patientSocketId: socket.id,
+            status: 'waiting',
+            timestamp: Date.now()
+        };
+
+        activeCallRequests.set(requestId, callRequest);
+        console.log(`Call request created: ${requestId}`);
+
+        // Notify all online doctors about the call request
+        let doctorsNotified = 0;
+        onlineDoctors.forEach((doctor) => {
+            const doctorSocket = io.sockets.sockets.get(doctor.socketId);
+            if (doctorSocket && doctorSocket.connected) {
+                console.log(`Sending call request to doctor: ${doctor.name} (${doctor.socketId})`);
+                doctorSocket.emit('incoming-call-request', {
                     patientId,
                     patientName,
-                    requestId: uuidv4()
+                    requestId
                 });
+                doctorsNotified++;
+            } else {
+                console.log(`Doctor ${doctor.name} socket not found or disconnected`);
+                // Remove disconnected doctor
+                onlineDoctors.delete(doctor.id);
             }
         });
+
+        console.log(`Call request sent to ${doctorsNotified} doctors`);
         
-        console.log(`Patient ${patientName} requesting video call`);
+        if (doctorsNotified === 0) {
+            socket.emit('call-rejected', {
+                doctorName: 'System',
+                message: 'No doctors available at the moment'
+            });
+            activeCallRequests.delete(requestId);
+            return;
+        }
+
+        broadcastWaitingPatients();
+        
+        // Auto-cancel request after 2 minutes
+        setTimeout(() => {
+            const request = activeCallRequests.get(requestId);
+            if (request && request.status === 'waiting') {
+                console.log(`Auto-cancelling request ${requestId} after timeout`);
+                activeCallRequests.delete(requestId);
+                const patientSocket = io.sockets.sockets.get(request.patientSocketId);
+                if (patientSocket) {
+                    patientSocket.emit('call-rejected', {
+                        doctorName: 'System',
+                        message: 'No doctors available at the moment'
+                    });
+                }
+                broadcastWaitingPatients();
+            }
+        }, 120000); // 2 minutes
     });
 
     // Doctor accepts call
     socket.on('accept-call', (data) => {
         const { patientId, doctorId, doctorName } = data;
-        const roomId = uuidv4();
         
-        // Create call room
-        callRooms.set(roomId, {
+        console.log(`Doctor ${doctorName} attempting to accept call from patient ${patientId}`);
+        
+        // Find the call request
+        let requestToAccept = null;
+        let requestId = null;
+        
+        for (const [rid, request] of activeCallRequests.entries()) {
+            if (request.patientId === patientId && request.status === 'waiting') {
+                requestToAccept = request;
+                requestId = rid;
+                break;
+            }
+        }
+
+        if (!requestToAccept) {
+            console.log(`Call request not found or already taken for patient ${patientId}`);
+            socket.emit('call-taken', { patientId });
+            return;
+        }
+
+        // Mark request as accepted
+        requestToAccept.status = 'accepted';
+        requestToAccept.doctorId = doctorId;
+        requestToAccept.doctorName = doctorName;
+        requestToAccept.doctorSocketId = socket.id;
+
+        // Create room for the call
+        const roomId = `room_${patientId}_${doctorId}_${Date.now()}`;
+        
+        console.log(`Creating call room: ${roomId}`);
+        
+        // Join both users to the room
+        socket.join(roomId);
+        const patientSocket = io.sockets.sockets.get(requestToAccept.patientSocketId);
+        if (patientSocket) {
+            patientSocket.join(roomId);
+            console.log('Patient joined room');
+        } else {
+            console.log('Patient socket not found');
+        }
+
+        // Create active call record
+        activeCalls.set(roomId, {
+            roomId,
             patientId,
             doctorId,
-            status: 'active'
+            patientName: requestToAccept.patientName,
+            doctorName,
+            status: 'active',
+            startTime: Date.now()
         });
-        
-        // Update user statuses
-        if (onlineUsers.has(patientId)) {
-            onlineUsers.get(patientId).status = 'in-call';
-        }
-        if (onlineUsers.has(doctorId)) {
-            onlineUsers.get(doctorId).status = 'in-call';
-        }
-        
-        const patientSocket = onlineUsers.get(patientId)?.socketId;
-        const doctorSocket = onlineUsers.get(doctorId)?.socketId;
-        
-        if (patientSocket && doctorSocket) {
-            // Join both users to the room
-            socket.join(roomId);
-            io.sockets.sockets.get(patientSocket)?.join(roomId);
-            
-            // Notify both parties
-            io.to(patientSocket).emit('call-accepted', {
+
+        // Notify patient that call was accepted
+        if (patientSocket) {
+            patientSocket.emit('call-accepted', {
                 roomId,
                 doctorName,
                 doctorId
             });
-            
-            io.to(doctorSocket).emit('call-started', {
-                roomId,
-                patientId,
-                patientName: onlineUsers.get(patientId)?.userName
-            });
-            
-            console.log(`Call started between patient ${patientId} and doctor ${doctorId}`);
-            
-            // Remove call request from other doctors
-            onlineUsers.forEach((user, userId) => {
-                if (user.userType === 'doctor' && userId !== doctorId) {
-                    io.to(user.socketId).emit('call-taken', { patientId });
-                }
-            });
+            console.log('Sent call-accepted to patient');
         }
+
+        // Notify doctor that call started
+        socket.emit('call-started', {
+            roomId,
+            patientId,
+            patientName: requestToAccept.patientName
+        });
+        console.log('Sent call-started to doctor');
+
+        // Remove the request and notify other doctors
+        activeCallRequests.delete(requestId);
+        
+        // Notify other doctors that this call was taken
+        onlineDoctors.forEach((doctor) => {
+            if (doctor.id !== doctorId) {
+                const doctorSocket = io.sockets.sockets.get(doctor.socketId);
+                if (doctorSocket) {
+                    doctorSocket.emit('call-taken', { patientId });
+                }
+            }
+        });
+
+        broadcastWaitingPatients();
+        console.log(`Call accepted by Dr. ${doctorName} for patient ${requestToAccept.patientName} (Room: ${roomId})`);
     });
 
     // Doctor rejects call
     socket.on('reject-call', (data) => {
         const { patientId, doctorId } = data;
-        
-        const patientSocket = onlineUsers.get(patientId)?.socketId;
-        if (patientSocket) {
-            io.to(patientSocket).emit('call-rejected', {
-                doctorId,
-                doctorName: onlineUsers.get(doctorId)?.userName
-            });
-        }
-        
-        console.log(`Doctor ${doctorId} rejected call from patient ${patientId}`);
+        console.log(`Dr. ${socket.userName} rejected call from patient ${patientId}`);
+        // Individual rejection - call request remains for other doctors
+        // Could add logic here to track which doctors rejected
     });
 
-    // WebRTC signaling
+    // WebRTC Signaling
     socket.on('webrtc-offer', (data) => {
         const { roomId, offer } = data;
-        socket.to(roomId).emit('webrtc-offer', { offer, from: socket.id });
+        console.log(`WebRTC offer received for room ${roomId}`);
+        socket.to(roomId).emit('webrtc-offer', {
+            offer,
+            from: socket.userId
+        });
+        console.log(`WebRTC offer sent to room ${roomId}`);
     });
 
     socket.on('webrtc-answer', (data) => {
         const { roomId, answer } = data;
-        socket.to(roomId).emit('webrtc-answer', { answer, from: socket.id });
+        console.log(`WebRTC answer received for room ${roomId}`);
+        socket.to(roomId).emit('webrtc-answer', {
+            answer,
+            from: socket.userId
+        });
+        console.log(`WebRTC answer sent to room ${roomId}`);
     });
 
     socket.on('webrtc-ice-candidate', (data) => {
         const { roomId, candidate } = data;
-        socket.to(roomId).emit('webrtc-ice-candidate', { candidate, from: socket.id });
+        socket.to(roomId).emit('webrtc-ice-candidate', {
+            candidate,
+            from: socket.userId
+        });
     });
 
     // End call
     socket.on('end-call', (data) => {
         const { roomId } = data;
-        const room = callRooms.get(roomId);
+        const call = activeCalls.get(roomId);
         
-        if (room) {
-            // Update user statuses back to online
-            if (onlineUsers.has(room.patientId)) {
-                onlineUsers.get(room.patientId).status = 'online';
-            }
-            if (onlineUsers.has(room.doctorId)) {
-                onlineUsers.get(room.doctorId).status = 'online';
-            }
+        if (call) {
+            // Notify other participant
+            socket.to(roomId).emit('call-ended');
             
-            // Notify all users in the room
-            io.to(roomId).emit('call-ended');
-            
-            // Remove the room
-            callRooms.delete(roomId);
-            
+            // Clean up
+            activeCalls.delete(roomId);
             console.log(`Call ended in room ${roomId}`);
         }
     });
@@ -208,42 +329,75 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
         
-        // Find and remove user from online users
-        let disconnectedUser = null;
-        let disconnectedUserId = null;
-        
-        for (let [userId, user] of onlineUsers.entries()) {
-            if (user.socketId === socket.id) {
-                disconnectedUser = user;
-                disconnectedUserId = userId;
-                break;
-            }
-        }
-        
-        if (disconnectedUser) {
-            onlineUsers.delete(disconnectedUserId);
+        if (socket.userId) {
+            console.log(`User ${socket.userName} (${socket.userType}) disconnected`);
             
-            if (disconnectedUser.userType === 'doctor') {
-                onlineDoctors.delete(disconnectedUserId);
-                // Broadcast updated doctor list
-                io.emit('doctors-online', Array.from(onlineUsers.entries())
-                    .filter(([id, user]) => user.userType === 'doctor')
-                    .map(([id, user]) => ({ id, name: user.userName, status: user.status }))
-                );
-            }
+            // Remove from online users
+            onlineUsers.delete(socket.userId);
             
-            // End any active calls involving this user
-            callRooms.forEach((room, roomId) => {
-                if (room.patientId === disconnectedUserId || room.doctorId === disconnectedUserId) {
-                    io.to(roomId).emit('call-ended');
-                    callRooms.delete(roomId);
+            if (socket.userType === 'doctor') {
+                onlineDoctors.delete(socket.userId);
+                console.log(`Doctor removed. Online doctors now: ${onlineDoctors.size}`);
+                broadcastOnlineDoctors();
+            } else if (socket.userType === 'patient') {
+                onlinePatients.delete(socket.userId);
+                
+                // Cancel any active call requests from this patient
+                for (const [requestId, request] of activeCallRequests.entries()) {
+                    if (request.patientId === socket.userId) {
+                        console.log(`Cancelling call request ${requestId} due to patient disconnect`);
+                        activeCallRequests.delete(requestId);
+                    }
                 }
-            });
+                broadcastWaitingPatients();
+            }
+
+            // End any active calls this user was in
+            for (const [roomId, call] of activeCalls.entries()) {
+                if (call.patientId === socket.userId || call.doctorId === socket.userId) {
+                    console.log(`Ending call ${roomId} due to user disconnect`);
+                    socket.to(roomId).emit('call-ended');
+                    activeCalls.delete(roomId);
+                }
+            }
         }
     });
 });
 
-// ---------------- Existing Routes ----------------
+// Broadcast online doctors to all patients
+function broadcastOnlineDoctors() {
+    const doctorsList = Array.from(onlineDoctors.values());
+    console.log(`Broadcasting ${doctorsList.length} online doctors to ${onlinePatients.size} patients`);
+    
+    onlinePatients.forEach((patient) => {
+        const patientSocket = io.sockets.sockets.get(patient.socketId);
+        if (patientSocket && patientSocket.connected) {
+            patientSocket.emit('doctors-online', doctorsList);
+        }
+    });
+}
+
+// Broadcast waiting patients to all doctors
+function broadcastWaitingPatients() {
+    const waitingPatients = Array.from(activeCallRequests.values())
+        .filter(req => req.status === 'waiting')
+        .map(req => ({
+            id: req.patientId,
+            name: req.patientName,
+            requestId: req.requestId
+        }));
+    
+    console.log(`Broadcasting ${waitingPatients.length} waiting patients to ${onlineDoctors.size} doctors`);
+    
+    onlineDoctors.forEach((doctor) => {
+        const doctorSocket = io.sockets.sockets.get(doctor.socketId);
+        if (doctorSocket && doctorSocket.connected) {
+            doctorSocket.emit('waiting-patients', waitingPatients);
+        }
+    });
+}
+
+// ---------------- REST API Routes ----------------
 
 // Patient Signup
 app.post("/api/auth/patient/signup", async (req, res) => {
@@ -260,7 +414,6 @@ app.post("/api/auth/patient/signup", async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const newPatient = await Patient.create({ 
             name, 
             email, 
@@ -297,7 +450,6 @@ app.post("/api/auth/doctor/signup", async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
         const newDoctor = await Doctor.create({ 
             name, 
             email, 
@@ -387,11 +539,21 @@ app.post("/api/auth/doctor/login", async (req, res) => {
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
-    res.json({ message: "Server is running", timestamp: new Date().toISOString() });
+    res.json({ 
+        message: "Server is running", 
+        timestamp: new Date().toISOString(),
+        onlineDoctors: onlineDoctors.size,
+        onlinePatients: onlinePatients.size,
+        activeCalls: activeCalls.size,
+        activeRequests: activeCallRequests.size,
+        doctorsList: Array.from(onlineDoctors.keys()),
+        patientsList: Array.from(onlinePatients.keys())
+    });
 });
 
 // Start server
 server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Health check: http://localhost:${PORT}/api/health`);
+    console.log('Socket.IO server initialized');
 });
