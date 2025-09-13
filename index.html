@@ -64,6 +64,57 @@
         </div>
     </section>
 
+       <!-- Doctor Signup Section -->
+    <section id="doctor-signup" class="section">
+        <div class="container">
+            <h2 style="text-align: center; margin-bottom: 2rem;">Doctor Signup</h2>
+            <div class="form-container">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    <i class="fas fa-user-md" style="font-size: 4rem; color: var(--primary-color);"></i>
+                </div>
+                <form id="doctorSignupForm" onsubmit="handleDoctorSignup(event)">
+                    <div class="form-group">
+                        <label for="doctorSignupName">Full Name</label>
+                        <input type="text" id="doctorSignupName" name="doctorSignupName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupEmail">Email</label>
+                        <input type="email" id="doctorSignupEmail" name="doctorSignupEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupLicense">Medical License ID</label>
+                        <input type="text" id="doctorSignupLicense" name="doctorSignupLicense" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupSpecialty">Specialty</label>
+                        <select id="doctorSignupSpecialty" name="doctorSignupSpecialty" required>
+                            <option value="">Select Specialty</option>
+                            <option value="general">General Medicine</option>
+                            <option value="cardiology">Cardiology</option>
+                            <option value="dermatology">Dermatology</option>
+                            <option value="pediatrics">Pediatrics</option>
+                            <option value="psychiatry">Psychiatry</option>
+                            <option value="orthopedics">Orthopedics</option>
+                            <option value="neurology">Neurology</option>
+                            <option value="gynecology">Gynecology</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="doctorSignupPassword">Password</label>
+                        <input type="password" id="doctorSignupPassword" name="doctorSignupPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-user-plus"></i> Create Doctor Account
+                    </button>
+                </form>
+                <p style="text-align: center; margin-top: 1rem;">
+                    <a onclick="showSection('doctor-login')" style="color: var(--primary-color); cursor: pointer;">
+                        Already have an account? Login here
+                    </a>
+                </p>
+            </div>
+        </div>
+    </section>
 
         <!-- auth script auth.js  -->
         <!-- // no need still  -->
