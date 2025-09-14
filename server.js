@@ -2,7 +2,7 @@ require('dotenv').config();
 const mongoose = require("mongoose");
 const express = require("express");
 const bodyParser = require("body-parser");
-const cors = require("cors");
+// const cors = require("cors");
 const bcrypt = require('bcrypt');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -736,3 +736,4 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server accessible from other devices on your network`);
     console.log('==========================================');
 });
+
