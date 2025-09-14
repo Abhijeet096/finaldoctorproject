@@ -44,6 +44,9 @@
         }, 3000);
     }
 
+    // With your Render URL (you'll get this after deployment):
+const SERVER_BASE = 'https://doctor-project-backend-si7c.onrender.com';
+
 
     // ------------------ Socket.IO Initialization ------------------
     function initializeSocket() {
