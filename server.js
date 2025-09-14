@@ -10,7 +10,7 @@ const Patient = require("./models/Patient");
 const Doctor = require("./models/Doctor");
 
 // Connect to MongoDB
-const MONGO_URI = "mongodb+srv://tradeabhiyt_db_user:KDHHiZHhRsRrD6fN@aihealthmatecluster.ryau30r.mongodb.net/?retryWrites=true&w=majority&appName=AIHealthMateCluster";
+const MONGO_URI = "mongodb+srv://_db_user:KDHHiZHhRsRrD6fN@aihealthmatecluster.ryau30r.mongodb.net/?retryWrites=true&w=majority&appName=AIHealthMateCluster";
 
 mongoose.connect(MONGO_URI, {
     useNewUrlParser: true,
