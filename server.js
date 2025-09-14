@@ -1,3 +1,4 @@
+require('dotenv').config();
 const mongoose = require("mongoose");
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -9,15 +10,24 @@ const socketIo = require('socket.io');
 const Patient = require("./models/Patient");
 const Doctor = require("./models/Doctor");
 
-// Connect to MongoDB
-const MONGO_URI = "mongodb+srv://tradeabhiyt_db_user:KDHHiZHhRsRrD6fN@aihealthmatecluster.ryau30r.mongodb.net/?retryWrites=true&w=majority&appName=AIHealthMateCluster";
+// Connect to MongoDB using environment variable
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+    console.error("ERROR: MONGO_URI not found in environment variables");
+    console.error("Please create a .env file with MONGO_URI=your_mongodb_connection_string");
+    process.exit(1);
+}
 
 mongoose.connect(MONGO_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-.then(() => console.log("MongoDB connected"))
-.catch(err => console.log("MongoDB connection error:", err));
+.then(() => console.log("MongoDB connected successfully"))
+.catch(err => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -34,7 +44,7 @@ const io = socketIo(server, {
     transports: ['websocket', 'polling']
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Enhanced CORS middleware
 app.use(cors({
@@ -176,7 +186,7 @@ io.on('connection', (socket) => {
         console.log('Doctors list:', Array.from(onlineDoctors.values()).map(d => d.name));
         
         if (onlineDoctors.size === 0) {
-            console.log('❌ No doctors online, rejecting call');
+            console.log('No doctors online, rejecting call');
             socket.emit('call-rejected', {
                 doctorName: 'System',
                 message: 'No doctors currently online'
@@ -195,7 +205,7 @@ io.on('connection', (socket) => {
         };
 
         activeCallRequests.set(requestId, callRequest);
-        console.log(`✅ Call request created: ${requestId}`);
+        console.log(`Call request created: ${requestId}`);
 
         // Notify ALL online doctors about the call request
         let doctorsNotified = 0;
@@ -205,7 +215,7 @@ io.on('connection', (socket) => {
         onlineDoctors.forEach((doctor, doctorId) => {
             const doctorSocket = io.sockets.sockets.get(doctor.socketId);
             if (doctorSocket && doctorSocket.connected) {
-                console.log(`✅ Sending to Dr. ${doctor.name} (${doctor.socketId.substring(0, 8)}...)`);
+                console.log(`Sending to Dr. ${doctor.name} (${doctor.socketId.substring(0, 8)}...)`);
                 doctorSocket.emit('incoming-call-request', {
                     patientId,
                     patientName,
@@ -213,17 +223,17 @@ io.on('connection', (socket) => {
                 });
                 doctorsNotified++;
             } else {
-                console.log(`❌ Dr. ${doctor.name} socket not connected, removing from list`);
+                console.log(`Dr. ${doctor.name} socket not connected, removing from list`);
                 onlineDoctors.delete(doctorId);
                 doctorsSkipped++;
             }
         });
 
-        console.log(`📊 Notification Results: ${doctorsNotified} notified, ${doctorsSkipped} skipped`);
+        console.log(`Notification Results: ${doctorsNotified} notified, ${doctorsSkipped} skipped`);
         console.log('========================\n');
         
         if (doctorsNotified === 0) {
-            console.log('❌ No doctors could be notified');
+            console.log('No doctors could be notified');
             socket.emit('call-rejected', {
                 doctorName: 'System',
                 message: 'No doctors available at the moment'
@@ -239,7 +249,7 @@ io.on('connection', (socket) => {
         setTimeout(() => {
             const request = activeCallRequests.get(requestId);
             if (request && request.status === 'waiting') {
-                console.log(`⏰ Auto-cancelling request ${requestId} after timeout`);
+                console.log(`Auto-cancelling request ${requestId} after timeout`);
                 activeCallRequests.delete(requestId);
                 const patientSocket = io.sockets.sockets.get(request.patientSocketId);
                 if (patientSocket && patientSocket.connected) {
@@ -274,7 +284,7 @@ io.on('connection', (socket) => {
         }
 
         if (!requestToAccept) {
-            console.log(`❌ Call request not found or already taken for patient ${patientId}`);
+            console.log(`Call request not found or already taken for patient ${patientId}`);
             socket.emit('call-taken', { patientId });
             return;
         }
@@ -288,14 +298,14 @@ io.on('connection', (socket) => {
         // Create room for the call
         const roomId = `room_${patientId}_${doctorId}_${Date.now()}`;
         
-        console.log(`🏠 Creating call room: ${roomId}`);
+        console.log(`Creating call room: ${roomId}`);
         
         // Join both users to the room
         socket.join(roomId);
         const patientSocket = io.sockets.sockets.get(requestToAccept.patientSocketId);
         if (patientSocket && patientSocket.connected) {
             patientSocket.join(roomId);
-            console.log('✅ Patient joined room');
+            console.log('Patient joined room');
             
             // Notify patient that call was accepted
             patientSocket.emit('call-accepted', {
@@ -303,9 +313,9 @@ io.on('connection', (socket) => {
                 doctorName,
                 doctorId
             });
-            console.log('✅ Sent call-accepted to patient');
+            console.log('Sent call-accepted to patient');
         } else {
-            console.log('❌ Patient socket not found or disconnected');
+            console.log('Patient socket not found or disconnected');
             socket.emit('call-failed', { message: 'Patient is no longer available' });
             activeCallRequests.delete(requestId);
             return;
@@ -328,25 +338,25 @@ io.on('connection', (socket) => {
             patientId,
             patientName: requestToAccept.patientName
         });
-        console.log('✅ Sent call-started to doctor');
+        console.log('Sent call-started to doctor');
 
         // Remove the request and notify other doctors
         activeCallRequests.delete(requestId);
         
         // Notify other doctors that this call was taken
-        console.log('📢 Notifying other doctors that call was taken...');
+        console.log('Notifying other doctors that call was taken...');
         onlineDoctors.forEach((doctor, dId) => {
             if (dId !== doctorId) {
                 const doctorSocket = io.sockets.sockets.get(doctor.socketId);
                 if (doctorSocket && doctorSocket.connected) {
                     doctorSocket.emit('call-taken', { patientId });
-                    console.log(`✅ Notified Dr. ${doctor.name} that call was taken`);
+                    console.log(`Notified Dr. ${doctor.name} that call was taken`);
                 }
             }
         });
 
         broadcastWaitingPatients();
-        console.log(`🎉 Call successfully established: Dr. ${doctorName} <-> ${requestToAccept.patientName}`);
+        console.log(`Call successfully established: Dr. ${doctorName} <-> ${requestToAccept.patientName}`);
         console.log('=====================\n');
     });
 
@@ -360,22 +370,22 @@ io.on('connection', (socket) => {
     // WebRTC Signaling - Enhanced with logging
     socket.on('webrtc-offer', (data) => {
         const { roomId, offer } = data;
-        console.log(`📡 WebRTC offer received for room ${roomId} from ${socket.userId}`);
+        console.log(`WebRTC offer received for room ${roomId} from ${socket.userId}`);
         socket.to(roomId).emit('webrtc-offer', {
             offer,
             from: socket.userId
         });
-        console.log(`📡 WebRTC offer forwarded to room ${roomId}`);
+        console.log(`WebRTC offer forwarded to room ${roomId}`);
     });
 
     socket.on('webrtc-answer', (data) => {
         const { roomId, answer } = data;
-        console.log(`📡 WebRTC answer received for room ${roomId} from ${socket.userId}`);
+        console.log(`WebRTC answer received for room ${roomId} from ${socket.userId}`);
         socket.to(roomId).emit('webrtc-answer', {
             answer,
             from: socket.userId
         });
-        console.log(`📡 WebRTC answer forwarded to room ${roomId}`);
+        console.log(`WebRTC answer forwarded to room ${roomId}`);
     });
 
     socket.on('webrtc-ice-candidate', (data) => {
@@ -392,7 +402,7 @@ io.on('connection', (socket) => {
         const call = activeCalls.get(roomId);
         
         if (call) {
-            console.log(`📞 Call ended in room ${roomId} by ${socket.userName}`);
+            console.log(`Call ended in room ${roomId} by ${socket.userName}`);
             // Notify other participant
             socket.to(roomId).emit('call-ended');
             
@@ -428,7 +438,7 @@ io.on('connection', (socket) => {
                 let requestsCancelled = 0;
                 for (const [requestId, request] of activeCallRequests.entries()) {
                     if (request.patientId === socket.userId) {
-                        console.log(`❌ Cancelling call request ${requestId} due to patient disconnect`);
+                        console.log(`Cancelling call request ${requestId} due to patient disconnect`);
                         activeCallRequests.delete(requestId);
                         requestsCancelled++;
                     }
@@ -442,7 +452,7 @@ io.on('connection', (socket) => {
             // End any active calls this user was in
             for (const [roomId, call] of activeCalls.entries()) {
                 if (call.patientId === socket.userId || call.doctorId === socket.userId) {
-                    console.log(`📞 Ending call ${roomId} due to user disconnect`);
+                    console.log(`Ending call ${roomId} due to user disconnect`);
                     socket.to(roomId).emit('call-ended');
                     activeCalls.delete(roomId);
                 }
@@ -463,7 +473,7 @@ function broadcastOnlineDoctors() {
         specialty: doctor.specialty || 'General'
     }));
     
-    console.log(`📢 Broadcasting ${doctorsList.length} online doctors to ${onlinePatients.size} patients`);
+    console.log(`Broadcasting ${doctorsList.length} online doctors to ${onlinePatients.size} patients`);
     
     let patientsNotified = 0;
     let patientsSkipped = 0;
@@ -474,13 +484,13 @@ function broadcastOnlineDoctors() {
             patientSocket.emit('doctors-online', doctorsList);
             patientsNotified++;
         } else {
-            console.log(`⚠️ Patient ${patient.name} socket disconnected, removing from list`);
+            console.log(`Patient ${patient.name} socket disconnected, removing from list`);
             onlinePatients.delete(patientId);
             patientsSkipped++;
         }
     });
     
-    console.log(`📊 Doctor list broadcast: ${patientsNotified} patients notified, ${patientsSkipped} removed`);
+    console.log(`Doctor list broadcast: ${patientsNotified} patients notified, ${patientsSkipped} removed`);
 }
 
 function broadcastWaitingPatients() {
@@ -493,7 +503,7 @@ function broadcastWaitingPatients() {
             timestamp: req.timestamp
         }));
     
-    console.log(`📢 Broadcasting ${waitingPatients.length} waiting patients to ${onlineDoctors.size} doctors`);
+    console.log(`Broadcasting ${waitingPatients.length} waiting patients to ${onlineDoctors.size} doctors`);
     
     let doctorsNotified = 0;
     let doctorsSkipped = 0;
@@ -504,13 +514,13 @@ function broadcastWaitingPatients() {
             doctorSocket.emit('waiting-patients', waitingPatients);
             doctorsNotified++;
         } else {
-            console.log(`⚠️ Doctor ${doctor.name} socket disconnected, removing from list`);
+            console.log(`Doctor ${doctor.name} socket disconnected, removing from list`);
             onlineDoctors.delete(doctorId);
             doctorsSkipped++;
         }
     });
     
-    console.log(`📊 Waiting patients broadcast: ${doctorsNotified} doctors notified, ${doctorsSkipped} removed`);
+    console.log(`Waiting patients broadcast: ${doctorsNotified} doctors notified, ${doctorsSkipped} removed`);
 }
 
 // ---------------- REST API Routes ----------------
@@ -709,10 +719,10 @@ app.get("/api/debug", (req, res) => {
 
 // Start server with enhanced logging
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
-    console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/debug`);
-    console.log(`🔌 Socket.IO server initialized with CORS enabled`);
-    console.log(`📱 Server accessible from other devices on your network`);
+    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/api/health`);
+    console.log(`Debug endpoint: http://localhost:${PORT}/api/debug`);
+    console.log(`Socket.IO server initialized with CORS enabled`);
+    console.log(`Server accessible from other devices on your network`);
     console.log('==========================================');
 });
