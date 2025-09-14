@@ -18,6 +18,8 @@ const rtcConfig = {
     ]
 };
 
+
+
 // ------------------ Navigation ------------------
 function showSection(sectionId) {
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
@@ -41,6 +43,7 @@ function showNotification(message, type = "success") {
         setTimeout(() => note.remove(), 300);
     }, 3000);
 }
+
 
 // ------------------ Socket.IO Initialization ------------------
 function initializeSocket() {
@@ -1061,6 +1064,8 @@ window.addEventListener('unhandledrejection', function(event) {
     // showNotification('An unexpected error occurred', 'error');
 });
 
+
+
 // Global error handler
 window.addEventListener('error', function(event) {
     console.error('Global error:', event.error);
@@ -1160,3 +1165,5 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('App initialization complete');
 });
+
+
