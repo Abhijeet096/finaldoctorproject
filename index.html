@@ -115,6 +115,11 @@
     <!-- AI Chat Section -->
     <section id="ai-chat" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2 style="text-align: center; margin-bottom: 2rem;">AI Symptom Analysis</h2>
             <div class="chat-container">
                 <div class="chat-header">
@@ -144,77 +149,87 @@
     </section>
 
     <!-- Video Call Section -->
-<section id="video-call" class="section">
-    <div class="container">
-        <h2 style="text-align: center; margin-bottom: 2rem;">Video Consultation</h2>
-        <div class="video-container">
-            <h3>Connect with a Doctor</h3>
-            <p>Start a secure video call with one of our certified physicians</p>
+    <section id="video-call" class="section">
+        <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
             
-            <!-- Connection Status -->
-            <div id="connectionStatus" style="text-align: center; margin: 1rem 0; padding: 0.5rem; background: var(--bg-light); border-radius: 0.5rem;">
-                <i class="fas fa-wifi"></i> Disconnected
-            </div>
-            
-            <div class="video-grid" id="videoGrid">
-                <!-- Local Video -->
-                <div style="position: relative;">
-                    <div class="video-placeholder" id="localVideoPlaceholder">
-                        <i class="fas fa-user"></i>
-                        <p>Your Video</p>
-                        <small>Camera access required</small>
-                    </div>
-                    <video id="localVideo" autoplay muted style="display: none; width: 100%; height: 300px; border-radius: 1rem; background: black;"></video>
+            <h2 style="text-align: center; margin-bottom: 2rem;">Video Consultation</h2>
+            <div class="video-container">
+                <h3>Connect with a Doctor</h3>
+                <p>Start a secure video call with one of our certified physicians</p>
+                
+                <!-- Connection Status -->
+                <div id="connectionStatus" style="text-align: center; margin: 1rem 0; padding: 0.5rem; background: var(--bg-light); border-radius: 0.5rem;">
+                    <i class="fas fa-wifi"></i> Disconnected
                 </div>
                 
-                <!-- Remote Video -->
-                <div style="position: relative;">
-                    <div class="video-placeholder" id="remoteVideoPlaceholder">
-                        <i class="fas fa-user-md"></i>
-                        <p>Doctor's Video</p>
-                        <small>Waiting for connection</small>
+                <div class="video-grid" id="videoGrid">
+                    <!-- Local Video -->
+                    <div style="position: relative;">
+                        <div class="video-placeholder" id="localVideoPlaceholder">
+                            <i class="fas fa-user"></i>
+                            <p>Your Video</p>
+                            <small>Camera access required</small>
+                        </div>
+                        <video id="localVideo" autoplay muted style="display: none; width: 100%; height: 300px; border-radius: 1rem; background: black;"></video>
                     </div>
-                    <video id="remoteVideo" autoplay style="display: none; width: 100%; height: 300px; border-radius: 1rem; background: black;"></video>
+                    
+                    <!-- Remote Video -->
+                    <div style="position: relative;">
+                        <div class="video-placeholder" id="remoteVideoPlaceholder">
+                            <i class="fas fa-user-md"></i>
+                            <p>Doctor's Video</p>
+                            <small>Waiting for connection</small>
+                        </div>
+                        <video id="remoteVideo" autoplay style="display: none; width: 100%; height: 300px; border-radius: 1rem; background: black;"></video>
+                    </div>
+                </div>
+
+                <div class="video-controls">
+                    <button id="startCallBtn" onclick="startVideoCall()" class="btn btn-primary">
+                        <i class="fas fa-video"></i> Start Call
+                    </button>
+                    <button id="endCallBtn" onclick="endVideoCall()" class="btn" style="background: var(--danger-color); color: white; display: none;">
+                        <i class="fas fa-phone-slash"></i> End Call
+                    </button>
+                    <button id="muteBtn" onclick="toggleMute()" class="btn btn-outline" style="display: none;">
+                        <i class="fas fa-microphone"></i> Mute
+                    </button>
+                    <button id="cameraBtn" onclick="toggleCamera()" class="btn btn-outline" style="display: none;">
+                        <i class="fas fa-video"></i> Camera
+                    </button>
+                </div>
+                
+                <!-- Online Doctors (for patients) -->
+                <div id="onlineDoctorsContainer" style="margin-top: 2rem; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
+                    <h4><i class="fas fa-user-md"></i> Available Doctors</h4>
+                    <p style="color: var(--text-light);">Loading...</p>
+                </div>
+                
+                <div style="margin-top: 2rem; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
+                    <h4><i class="fas fa-info-circle"></i> Video Call Features</h4>
+                    <ul style="margin: 1rem 0; padding-left: 2rem;">
+                        <li>HD video and audio quality</li>
+                        <li>Secure encrypted connection</li>
+                        <li>Real-time communication</li>
+                        <li>Professional healthcare consultation</li>
+                    </ul>
                 </div>
             </div>
-
-            <div class="video-controls">
-                <button id="startCallBtn" onclick="startVideoCall()" class="btn btn-primary">
-                    <i class="fas fa-video"></i> Start Call
-                </button>
-                <button id="endCallBtn" onclick="endVideoCall()" class="btn" style="background: var(--danger-color); color: white; display: none;">
-                    <i class="fas fa-phone-slash"></i> End Call
-                </button>
-                <button id="muteBtn" onclick="toggleMute()" class="btn btn-outline" style="display: none;">
-                    <i class="fas fa-microphone"></i> Mute
-                </button>
-                <button id="cameraBtn" onclick="toggleCamera()" class="btn btn-outline" style="display: none;">
-                    <i class="fas fa-video"></i> Camera
-                </button>
-            </div>
-            
-            <!-- Online Doctors (for patients) -->
-            <div id="onlineDoctorsContainer" style="margin-top: 2rem; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
-                <h4><i class="fas fa-user-md"></i> Available Doctors</h4>
-                <p style="color: var(--text-light);">Loading...</p>
-            </div>
-            
-            <div style="margin-top: 2rem; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
-                <h4><i class="fas fa-info-circle"></i> Video Call Features</h4>
-                <ul style="margin: 1rem 0; padding-left: 2rem;">
-                    <li>HD video and audio quality</li>
-                    <li>Secure encrypted connection</li>
-                    <li>Real-time communication</li>
-                    <li>Professional healthcare consultation</li>
-                </ul>
-            </div>
         </div>
-    </div>
-</section>
+    </section>
 
     <!-- Doctor Login Section -->
     <section id="doctor-login" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2 style="text-align: center; margin-bottom: 2rem;">Doctor Portal</h2>
             <div class="form-container">
                 <div style="text-align: center; margin-bottom: 2rem;">
@@ -253,6 +268,11 @@
     <!-- Patient Login Section -->
     <section id="patient-login" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2 style="text-align: center; margin-bottom: 2rem;">Patient Portal</h2>
             <div class="form-container">
                 <div style="text-align: center; margin-bottom: 2rem;">
@@ -281,6 +301,11 @@
     <!-- Patient Signup Section -->
     <section id="patient-signup" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2 style="text-align: center; margin-bottom: 2rem;">Patient Signup</h2>
             <div class="form-container">
                 <form id="patientSignupForm" onsubmit="handlePatientSignup(event)">
@@ -320,6 +345,11 @@
     <!-- Doctor Signup Section -->
     <section id="doctor-signup" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2 style="text-align: center; margin-bottom: 2rem;">Doctor Signup</h2>
             <div class="form-container">
                 <div style="text-align: center; margin-bottom: 2rem;">
@@ -372,6 +402,11 @@
     <!-- Patient Dashboard -->
     <section id="patient-dashboard" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2>Welcome Back, <span id="patientName">Patient</span>!</h2>
             <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your health journey from your personalized dashboard</p>
             
@@ -436,6 +471,68 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="prescription-card" style="margin-top: 1rem;">
+                    <div class="prescription-header">
+                        <h4>Patient: Sarah Wilson</h4>
+                        <small>AI Suggested Prescription | January 24, 2025</small>
+                    </div>
+                    <div class="prescription-content">
+                        <p><strong>Symptoms:</strong> Persistent cough, sore throat</p>
+                        <p><strong>AI Diagnosis:</strong> Upper respiratory tract infection</p>
+                        <p><strong>Suggested Medications:</strong></p>
+                        <ul class="medication-list">
+                            <li><strong>Amoxicillin 250mg</strong> - 3 times daily for 7 days</li>
+                            <li><strong>Cough syrup</strong> - 2 teaspoons before bed</li>
+                            <li><strong>Throat lozenges</strong> - As needed for sore throat</li>
+                        </ul>
+                        <div class="prescription-actions">
+                            <button onclick="approvePrescription('002')" class="btn btn-secondary">
+                                <i class="fas fa-check"></i> Approve
+                            </button>
+                            <button onclick="rejectPrescription('002')" class="btn btn-danger">
+                                <i class="fas fa-times"></i> Reject
+                            </button>
+                            <button onclick="modifyPrescription('002')" class="btn btn-outline">
+                                <i class="fas fa-edit"></i> Modify
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div style="margin-top: 3rem;">
+                <h3><i class="fas fa-history"></i> Recent Activity</h3>
+                <div style="background: white; border-radius: 1rem; padding: 1.5rem; box-shadow: var(--shadow); margin-top: 1rem;">
+                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>AI Chat Session Completed</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Symptom analysis for headache</p>
+                            </div>
+                            <small style="color: var(--text-light);">2 hours ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>Prescription Downloaded</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Prescription #001 downloaded</p>
+                            </div>
+                            <small style="color: var(--text-light);">5 hours ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item" style="padding: 1rem 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>Account Created</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Welcome to AI Health Mate!</p>
+                            </div>
+                            <small style="color: var(--text-light);">1 day ago</small>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Logout Button -->
@@ -447,10 +544,14 @@
         </div>
     </section>
 
-    <!-- Doctor Dashboard - SINGLE VERSION -->
-   <!-- Doctor Dashboard - COMPLETE VERSION -->
+    <!-- Doctor Dashboard -->
     <section id="doctor-dashboard" class="section">
         <div class="container">
+            <!-- Back Button -->
+            <button class="back-button" onclick="goBack()">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            
             <h2>Doctor Dashboard - <span id="doctorName">Dr. Smith</span></h2>
             <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your patients and approve prescriptions</p>
             
@@ -556,7 +657,7 @@
                             <button onclick="approvePrescription('001')" class="btn btn-secondary">
                                 <i class="fas fa-check"></i> Approve
                             </button>
-                            <button onclick="rejectPrescription('001')" class="btn" style="background: var(--danger-color); color: white;">
+                            <button onclick="rejectPrescription('001')" class="btn btn-danger">
                                 <i class="fas fa-times"></i> Reject
                             </button>
                             <button onclick="modifyPrescription('001')" class="btn btn-outline">
@@ -584,12 +685,61 @@
                             <button onclick="approvePrescription('002')" class="btn btn-secondary">
                                 <i class="fas fa-check"></i> Approve
                             </button>
-                            <button onclick="rejectPrescription('002')" class="btn" style="background: var(--danger-color); color: white;">
+                            <button onclick="rejectPrescription('002')" class="btn btn-danger">
                                 <i class="fas fa-times"></i> Reject
                             </button>
                             <button onclick="modifyPrescription('002')" class="btn btn-outline">
                                 <i class="fas fa-edit"></i> Modify
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="prescription-card" style="margin-top: 1rem;">
+                    <div class="prescription-header">
+                        <h4>Patient: Michael Chen</h4>
+                        <small>AI Suggested Prescription | January 23, 2025</small>
+                    </div>
+                    <div class="prescription-content">
+                        <p><strong>Symptoms:</strong> Stomach pain, nausea, bloating</p>
+                        <p><strong>AI Diagnosis:</strong> Gastritis</p>
+                        <p><strong>Suggested Medications:</strong></p>
+                        <ul class="medication-list">
+                            <li><strong>Omeprazole 20mg</strong> - Once daily before breakfast</li>
+                            <li><strong>Simethicone 40mg</strong> - After meals for bloating</li>
+                            <li><strong>Dietary changes</strong> - Avoid spicy and acidic foods</li>
+                        </ul>
+                        <div class="prescription-actions">
+                            <button onclick="approvePrescription('003')" class="btn btn-secondary">
+                                <i class="fas fa-check"></i> Approve
+                            </button>
+                            <button onclick="rejectPrescription('003')" class="btn btn-danger">
+                                <i class="fas fa-times"></i> Reject
+                            </button>
+                            <button onclick="modifyPrescription('003')" class="btn btn-outline">
+                                <i class="fas fa-edit"></i> Modify
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Patient Records Summary -->
+            <div style="margin-top: 3rem;">
+                <h3><i class="fas fa-folder-medical"></i> Patient Records Summary</h3>
+                <div style="background: white; border-radius: 1rem; padding: 1.5rem; box-shadow: var(--shadow); margin-top: 1rem;">
+                    <div class="dashboard-grid">
+                        <div class="dashboard-card" style="margin: 0; background: var(--bg-light);">
+                            <h5><i class="fas fa-users"></i> Total Patients</h5>
+                            <div class="stat-number" style="color: var(--primary-color); font-size: 2rem;">156</div>
+                        </div>
+                        <div class="dashboard-card" style="margin: 0; background: var(--bg-light);">
+                            <h5><i class="fas fa-calendar-check"></i> This Month</h5>
+                            <div class="stat-number" style="color: var(--secondary-color); font-size: 2rem;">23</div>
+                        </div>
+                        <div class="dashboard-card" style="margin: 0; background: var(--bg-light);">
+                            <h5><i class="fas fa-clock"></i> Avg. Consultation</h5>
+                            <div class="stat-number" style="color: var(--accent-color); font-size: 2rem;">18min</div>
                         </div>
                     </div>
                 </div>
@@ -617,6 +767,24 @@
                             <small style="color: var(--text-light);">5 hours ago</small>
                         </div>
                     </div>
+                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>Emergency consultation</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: David Wilson - Chest pain</p>
+                            </div>
+                            <small style="color: var(--text-light);">8 hours ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>Prescription modified</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: Lisa Anderson - Diabetes medication</p>
+                            </div>
+                            <small style="color: var(--text-light);">12 hours ago</small>
+                        </div>
+                    </div>
                     <div class="activity-item" style="padding: 1rem 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
@@ -624,6 +792,43 @@
                                 <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: Robert Brown</p>
                             </div>
                             <small style="color: var(--text-light);">1 day ago</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Doctor Analytics -->
+            <div style="margin-top: 3rem;">
+                <h3><i class="fas fa-chart-line"></i> Performance Analytics</h3>
+                <div class="dashboard-grid" style="margin-top: 1.5rem;">
+                    <div class="dashboard-card">
+                        <h5><i class="fas fa-star"></i> Patient Satisfaction</h5>
+                        <div class="stat-number" style="color: var(--secondary-color); font-size: 2.5rem;">4.9/5</div>
+                        <p style="color: var(--text-light); margin: 0.5rem 0;">Based on 89 reviews</p>
+                        <div style="background: var(--bg-light); padding: 0.5rem; border-radius: 0.5rem;">
+                            <i class="fas fa-star" style="color: gold;"></i>
+                            <i class="fas fa-star" style="color: gold;"></i>
+                            <i class="fas fa-star" style="color: gold;"></i>
+                            <i class="fas fa-star" style="color: gold;"></i>
+                            <i class="fas fa-star" style="color: gold;"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h5><i class="fas fa-clock"></i> Response Time</h5>
+                        <div class="stat-number" style="color: var(--primary-color); font-size: 2.5rem;">3.2min</div>
+                        <p style="color: var(--text-light); margin: 0.5rem 0;">Average response time</p>
+                        <div style="background: var(--bg-light); padding: 0.5rem; border-radius: 0.5rem; color: var(--secondary-color);">
+                            <i class="fas fa-arrow-down"></i> 15% faster than last month
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-card">
+                        <h5><i class="fas fa-check-circle"></i> Success Rate</h5>
+                        <div class="stat-number" style="color: var(--secondary-color); font-size: 2.5rem;">96%</div>
+                        <p style="color: var(--text-light); margin: 0.5rem 0;">Successful diagnoses</p>
+                        <div style="background: var(--bg-light); padding: 0.5rem; border-radius: 0.5rem; color: var(--secondary-color);">
+                            <i class="fas fa-trophy"></i> Top 10% performers
                         </div>
                     </div>
                 </div>
@@ -645,88 +850,6 @@
 
     <!-- Notification Container -->
     <div id="notification" class="notification"></div>
-
-    <!-- CSS Styles for missing elements -->
-    <style>
-        .incoming-call-dialog {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-        }
-
-        .call-dialog-content {
-            background: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            max-width: 400px;
-            width: 90%;
-            text-align: center;
-        }
-
-        .call-dialog-header {
-            margin-bottom: 1rem;
-        }
-
-        .call-dialog-header i {
-            font-size: 2rem;
-            color: var(--primary-color);
-            margin-bottom: 1rem;
-        }
-
-        .call-dialog-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            margin-top: 1.5rem;
-        }
-
-        .doctor-item, .patient-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: var(--bg-light);
-            border-radius: 0.5rem;
-            margin: 0.5rem 0;
-        }
-
-        .doctor-info, .patient-info {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .doctor-info .fas.fa-circle.online {
-            color: #22c55e;
-        }
-
-        .doctor-info .fas.fa-circle.busy {
-            color: #ef4444;
-        }
-
-        .btn-sm {
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-        }
-
-        .btn-danger {
-            background: #ef4444;
-            color: white;
-            border: 1px solid #ef4444;
-        }
-
-        .btn-danger:hover {
-            background: #dc2626;
-            border-color: #dc2626;
-        }
-    </style>
 
 </body>
 </html>
