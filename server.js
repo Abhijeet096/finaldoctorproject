@@ -5,10 +5,23 @@ const cors = require("cors");
 const bcrypt = require('bcrypt');
 const http = require('http');
 const socketIo = require('socket.io');
+const OpenAI = require('openai');
 require('dotenv').config();
 
 const Patient = require("./models/Patient");
 const Doctor = require("./models/Doctor");
+
+// Initialize OpenAI with environment variable
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Validate required environment variables
+if (!process.env.OPENAI_API_KEY) {
+    console.error('❌ OPENAI_API_KEY is not set in environment variables');
+    console.error('Please add OPENAI_API_KEY=your_api_key_here to your .env file');
+    process.exit(1);
+}
 
 // Connect to MongoDB using environment variable
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/aihealthmate";
@@ -47,12 +60,75 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
-// Store online users and call requests - using Maps for better cross-device tracking
-const onlineUsers = new Map(); // userId -> socket info
-const onlineDoctors = new Map(); // doctorId -> doctor info
-const onlinePatients = new Map(); // patientId -> patient info
-const activeCallRequests = new Map(); // requestId -> call info
-const activeCalls = new Map(); // roomId -> call info
+// Store online users, call requests, and chat sessions
+const onlineUsers = new Map();
+const onlineDoctors = new Map();
+const onlinePatients = new Map();
+const activeCallRequests = new Map();
+const activeCalls = new Map();
+
+// NEW: Chat session storage for medical consultations
+const chatSessions = new Map(); // sessionId -> chat data
+const pendingPrescriptions = new Map(); // prescriptionId -> prescription data
+
+// Medical consultation flow configuration
+const MEDICAL_QUESTIONS = {
+    fever: [
+        "How long have you been experiencing fever?",
+        "What is your current body temperature?",
+        "Are you taking any fever-reducing medication?",
+        "Do you have any other symptoms like chills, headache, or body aches?"
+    ],
+    headache: [
+        "How long have you been experiencing headaches?",
+        "On a scale of 1-10, how would you rate your pain?",
+        "Is this a throbbing, sharp, or dull pain?",
+        "Are you experiencing any visual disturbances or nausea?"
+    ],
+    cough: [
+        "How long have you had this cough?",
+        "Is it a dry cough or are you coughing up phlegm?",
+        "Do you have any chest pain or difficulty breathing?",
+        "Are you a smoker or have you been around smoke recently?"
+    ],
+    "stomach pain": [
+        "How long have you been experiencing stomach pain?",
+        "Where exactly is the pain located?",
+        "Is the pain constant or does it come and go?",
+        "Have you noticed any changes in your bowel movements or appetite?"
+    ],
+    "chest pain": [
+        "How long have you been experiencing chest pain?",
+        "On a scale of 1-10, how severe is the pain?",
+        "Does the pain worsen with breathing or movement?",
+        "Are you experiencing shortness of breath or palpitations?"
+    ],
+    default: [
+        "Can you describe your symptoms in more detail?",
+        "When did these symptoms start?",
+        "Have you experienced anything like this before?",
+        "Are you currently taking any medications?"
+    ]
+};
+
+// Medical AI System Prompt
+const MEDICAL_SYSTEM_PROMPT = `You are Dr. AI, a professional medical AI assistant for initial symptom assessment. Your role is to:
+
+1. ALWAYS ask follow-up questions to gather more information about symptoms
+2. Be empathetic and professional in your responses
+3. Ask one question at a time to avoid overwhelming the patient
+4. When you have enough information (after 3-4 exchanges), provide a preliminary assessment
+5. ALWAYS remind patients that this is not a substitute for professional medical advice
+6. If symptoms seem serious, recommend immediate medical attention
+
+Guidelines:
+- Ask about duration, severity, and associated symptoms
+- Inquire about medical history and current medications when relevant
+- Use simple, clear language
+- Never provide definitive diagnoses
+- Always suggest consulting with a healthcare professional for proper treatment
+
+Current conversation context: The patient has described their initial symptoms. Ask appropriate follow-up questions to gather more information.`;
 
 // Debug logging helper
 function logState() {
@@ -67,12 +143,187 @@ function logState() {
         name: patient.name,
         socketId: patient.socketId.substring(0, 8) + '...'
     })));
-    console.log('Active Call Requests:', Array.from(activeCallRequests.entries()).map(([id, req]) => ({
-        requestId: id,
-        patient: req.patientName,
-        status: req.status
-    })));
+    console.log('Active Chat Sessions:', chatSessions.size);
+    console.log('Pending Prescriptions:', pendingPrescriptions.size);
     console.log('====================\n');
+}
+
+// AI Chat Helper Functions
+async function generateAIResponse(sessionId, userMessage, chatHistory) {
+    try {
+        const session = chatSessions.get(sessionId);
+        if (!session) {
+            console.error('Session not found:', sessionId);
+            return "I apologize, but I couldn't find your session. Please start a new consultation.";
+        }
+
+        // Build conversation context
+        const messages = [
+            { role: 'system', content: MEDICAL_SYSTEM_PROMPT },
+            ...chatHistory.map(msg => ({
+                role: msg.sender === 'ai' ? 'assistant' : 'user',
+                content: msg.content
+            })),
+            { role: 'user', content: userMessage }
+        ];
+
+        console.log(`🤖 Generating AI response for session ${sessionId}`);
+        console.log(`📝 Message count: ${messages.length}`);
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: messages,
+            max_tokens: 300,
+            temperature: 0.7,
+        });
+
+        const aiResponse = completion.choices[0].message.content.trim();
+        console.log(`✅ AI Response generated: ${aiResponse.substring(0, 100)}...`);
+
+        // Update session
+        session.messageCount += 2; // user message + AI response
+        session.lastActivity = Date.now();
+
+        // Check if we should generate prescription (after 6+ messages)
+        if (session.messageCount >= 6 && !session.prescriptionGenerated) {
+            console.log(`📋 Preparing to generate prescription for session ${sessionId}`);
+            setTimeout(() => generateMedicalPrescription(sessionId), 2000);
+            session.prescriptionGenerated = true;
+        }
+
+        return aiResponse;
+
+    } catch (error) {
+        console.error('OpenAI API Error:', error);
+        
+        // Fallback responses
+        if (error.code === 'insufficient_quota' || error.status === 429) {
+            return "I apologize, but I'm experiencing high demand right now. Please try again in a moment, or consider connecting with one of our available doctors for immediate assistance.";
+        }
+        
+        return "I apologize, but I'm having trouble processing your request right now. Please try rephrasing your symptoms, or connect with one of our available doctors for assistance.";
+    }
+}
+
+async function generateMedicalPrescription(sessionId) {
+    try {
+        const session = chatSessions.get(sessionId);
+        if (!session || !session.chatHistory || session.chatHistory.length < 4) {
+            console.log(`❌ Cannot generate prescription: insufficient data for session ${sessionId}`);
+            return;
+        }
+
+        console.log(`📋 Generating medical prescription for session ${sessionId}`);
+
+        // Create conversation summary for prescription
+        const conversationSummary = session.chatHistory
+            .map(msg => `${msg.sender.toUpperCase()}: ${msg.content}`)
+            .join('\n');
+
+        const prescriptionPrompt = `Based on the following medical consultation, generate a detailed medical prescription format. Include preliminary diagnosis, recommended medications (with dosages), and general care instructions. Remember this is AI-suggested and requires doctor approval.
+
+Consultation Summary:
+${conversationSummary}
+
+Generate a professional medical prescription format with:
+1. Patient symptoms summary
+2. Preliminary AI diagnosis
+3. Suggested medications with dosages
+4. Care instructions
+5. Duration of treatment
+6. Follow-up recommendations
+
+Format as a structured prescription that a doctor can review and approve.`;
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { 
+                    role: 'system', 
+                    content: 'You are a medical AI creating prescription suggestions for doctor review. Be thorough, professional, and include appropriate disclaimers.' 
+                },
+                { role: 'user', content: prescriptionPrompt }
+            ],
+            max_tokens: 500,
+            temperature: 0.3,
+        });
+
+        const prescriptionContent = completion.choices[0].message.content.trim();
+        
+        // Create prescription record
+        const prescriptionId = `presc_${sessionId}_${Date.now()}`;
+        const prescriptionData = {
+            id: prescriptionId,
+            patientId: session.patientId,
+            patientName: session.patientName,
+            sessionId: sessionId,
+            content: prescriptionContent,
+            status: 'pending_approval',
+            createdAt: Date.now(),
+            aiGenerated: true,
+            conversationSummary: conversationSummary
+        };
+
+        pendingPrescriptions.set(prescriptionId, prescriptionData);
+
+        // Notify patient about prescription generation
+        const patientSocket = io.sockets.sockets.get(session.socketId);
+        if (patientSocket && patientSocket.connected) {
+            patientSocket.emit('prescription-generated', {
+                prescriptionId,
+                message: "Based on our consultation, I've generated a preliminary treatment plan that has been sent to our doctors for review and approval."
+            });
+            console.log(`✅ Notified patient about generated prescription ${prescriptionId}`);
+        }
+
+        // Send prescription to the most recently active doctor
+        const recentDoctor = findMostRecentDoctor();
+        if (recentDoctor) {
+            const doctorSocket = io.sockets.sockets.get(recentDoctor.socketId);
+            if (doctorSocket && doctorSocket.connected) {
+                doctorSocket.emit('new-prescription-approval', prescriptionData);
+                console.log(`✅ Sent prescription ${prescriptionId} to Dr. ${recentDoctor.name} for approval`);
+            }
+        } else {
+            console.log(`⚠️ No active doctors found to send prescription ${prescriptionId}`);
+        }
+
+        // Broadcast to all online doctors
+        broadcastPrescriptionToAllDoctors(prescriptionData);
+
+        console.log(`✅ Prescription ${prescriptionId} generated and queued for approval`);
+
+    } catch (error) {
+        console.error('Error generating prescription:', error);
+    }
+}
+
+function findMostRecentDoctor() {
+    let mostRecent = null;
+    let latestTime = 0;
+
+    onlineDoctors.forEach((doctor, doctorId) => {
+        if (doctor.joinedAt > latestTime) {
+            latestTime = doctor.joinedAt;
+            mostRecent = doctor;
+        }
+    });
+
+    return mostRecent;
+}
+
+function broadcastPrescriptionToAllDoctors(prescriptionData) {
+    let notifiedDoctors = 0;
+    
+    onlineDoctors.forEach((doctor, doctorId) => {
+        const doctorSocket = io.sockets.sockets.get(doctor.socketId);
+        if (doctorSocket && doctorSocket.connected) {
+            doctorSocket.emit('new-prescription-approval', prescriptionData);
+            notifiedDoctors++;
+        }
+    });
+
+    console.log(`📢 Prescription ${prescriptionData.id} broadcasted to ${notifiedDoctors} doctors`);
 }
 
 // ---------------- Socket.IO Events ----------------
@@ -87,14 +338,12 @@ io.on('connection', (socket) => {
         
         // Remove any existing connections for this user (handle reconnections)
         if (userType === 'doctor') {
-            // Remove old doctor connection if exists
             const existingDoctor = onlineDoctors.get(userId);
             if (existingDoctor) {
                 console.log(`Removing existing doctor connection for ${userName}`);
                 onlineDoctors.delete(userId);
             }
         } else if (userType === 'patient') {
-            // Remove old patient connection if exists
             const existingPatient = onlinePatients.get(userId);
             if (existingPatient) {
                 console.log(`Removing existing patient connection for ${userName}`);
@@ -137,7 +386,15 @@ io.on('connection', (socket) => {
                 }));
             
             socket.emit('waiting-patients', waitingPatients);
-            console.log(`Sent ${waitingPatients.length} waiting patients to doctor ${userName}`);
+            
+            // Send pending prescriptions to doctor
+            const pendingPrescriptionsForDoctor = Array.from(pendingPrescriptions.values())
+                .filter(presc => presc.status === 'pending_approval');
+            
+            if (pendingPrescriptionsForDoctor.length > 0) {
+                socket.emit('pending-prescriptions-list', pendingPrescriptionsForDoctor);
+                console.log(`Sent ${pendingPrescriptionsForDoctor.length} pending prescriptions to Dr. ${userName}`);
+            }
             
         } else if (userType === 'patient') {
             onlinePatients.set(userId, {
@@ -167,6 +424,153 @@ io.on('connection', (socket) => {
         });
     });
 
+    // NEW: Start AI Chat Session
+    socket.on('start-ai-chat', (data) => {
+        const { patientId, patientName } = data;
+        const sessionId = `chat_${patientId}_${Date.now()}`;
+        
+        console.log(`🤖 Starting AI chat session ${sessionId} for patient ${patientName}`);
+        
+        const chatSession = {
+            sessionId,
+            patientId,
+            patientName,
+            socketId: socket.id,
+            chatHistory: [],
+            messageCount: 0,
+            startTime: Date.now(),
+            lastActivity: Date.now(),
+            prescriptionGenerated: false
+        };
+        
+        chatSessions.set(sessionId, chatSession);
+        
+        socket.emit('ai-chat-started', { 
+            sessionId,
+            message: "Hello! I'm Dr. AI, your medical assistant. I'm here to help assess your symptoms. Please describe what you're experiencing, and I'll ask some follow-up questions to better understand your condition."
+        });
+        
+        console.log(`✅ AI chat session started: ${sessionId}`);
+    });
+
+    // NEW: Handle AI Chat Messages
+    socket.on('ai-chat-message', async (data) => {
+        const { sessionId, message, patientId } = data;
+        
+        console.log(`💬 AI Chat message received from session ${sessionId}: ${message.substring(0, 50)}...`);
+        
+        const session = chatSessions.get(sessionId);
+        if (!session) {
+            socket.emit('ai-chat-error', { message: 'Chat session not found. Please start a new consultation.' });
+            return;
+        }
+
+        // Add user message to history
+        const userMessage = {
+            sender: 'user',
+            content: message,
+            timestamp: Date.now()
+        };
+        session.chatHistory.push(userMessage);
+
+        // Generate AI response
+        const aiResponse = await generateAIResponse(sessionId, message, session.chatHistory);
+        
+        // Add AI response to history
+        const aiMessage = {
+            sender: 'ai',
+            content: aiResponse,
+            timestamp: Date.now()
+        };
+        session.chatHistory.push(aiMessage);
+
+        // Send response to patient
+        socket.emit('ai-chat-response', {
+            message: aiResponse,
+            sessionId: sessionId
+        });
+
+        console.log(`✅ AI response sent for session ${sessionId}`);
+    });
+
+    // NEW: Doctor prescription approval/rejection
+    socket.on('approve-prescription', (data) => {
+        const { prescriptionId, doctorId, doctorName, modifications } = data;
+        
+        console.log(`👨‍⚕️ Dr. ${doctorName} approving prescription ${prescriptionId}`);
+        
+        const prescription = pendingPrescriptions.get(prescriptionId);
+        if (!prescription) {
+            socket.emit('prescription-error', { message: 'Prescription not found' });
+            return;
+        }
+
+        prescription.status = 'approved';
+        prescription.approvedBy = doctorId;
+        prescription.approvedByName = doctorName;
+        prescription.approvedAt = Date.now();
+        
+        if (modifications) {
+            prescription.modifications = modifications;
+            prescription.finalContent = modifications;
+        } else {
+            prescription.finalContent = prescription.content;
+        }
+
+        // Notify patient
+        const patientSocket = io.sockets.sockets.get(prescription.patientId);
+        if (patientSocket) {
+            const patientSocketActual = Array.from(io.sockets.sockets.values())
+                .find(s => s.userId === prescription.patientId);
+            
+            if (patientSocketActual) {
+                patientSocketActual.emit('prescription-approved', {
+                    prescriptionId,
+                    doctorName,
+                    content: prescription.finalContent,
+                    message: `Your prescription has been approved by Dr. ${doctorName}`
+                });
+            }
+        }
+
+        socket.emit('prescription-approved-confirm', { prescriptionId });
+        console.log(`✅ Prescription ${prescriptionId} approved by Dr. ${doctorName}`);
+    });
+
+    socket.on('reject-prescription', (data) => {
+        const { prescriptionId, doctorId, doctorName, reason } = data;
+        
+        console.log(`👨‍⚕️ Dr. ${doctorName} rejecting prescription ${prescriptionId}`);
+        
+        const prescription = pendingPrescriptions.get(prescriptionId);
+        if (!prescription) {
+            socket.emit('prescription-error', { message: 'Prescription not found' });
+            return;
+        }
+
+        prescription.status = 'rejected';
+        prescription.rejectedBy = doctorId;
+        prescription.rejectedByName = doctorName;
+        prescription.rejectedAt = Date.now();
+        prescription.rejectionReason = reason;
+
+        // Notify patient
+        const patientSocket = Array.from(io.sockets.sockets.values())
+            .find(s => s.userId === prescription.patientId);
+        
+        if (patientSocket) {
+            patientSocket.emit('prescription-rejected', {
+                prescriptionId,
+                doctorName,
+                reason,
+                message: `Your prescription was reviewed by Dr. ${doctorName}. Please consult with a doctor directly for further assistance.`
+            });
+        }
+
+        socket.emit('prescription-rejected-confirm', { prescriptionId });
+        console.log(`❌ Prescription ${prescriptionId} rejected by Dr. ${doctorName}`);
+    });
+
     // Patient requests video call
     socket.on('request-video-call', (data) => {
         const { patientId, patientName } = data;
@@ -174,7 +578,6 @@ io.on('connection', (socket) => {
         console.log(`\n=== VIDEO CALL REQUEST ===`);
         console.log(`From: ${patientName} (${patientId})`);
         console.log(`Available doctors: ${onlineDoctors.size}`);
-        console.log('Doctors list:', Array.from(onlineDoctors.values()).map(d => d.name));
         
         if (onlineDoctors.size === 0) {
             console.log('❌ No doctors online, rejecting call');
@@ -200,13 +603,10 @@ io.on('connection', (socket) => {
 
         // Notify ALL online doctors about the call request
         let doctorsNotified = 0;
-        let doctorsSkipped = 0;
         
-        console.log('\n--- Notifying Doctors ---');
         onlineDoctors.forEach((doctor, doctorId) => {
             const doctorSocket = io.sockets.sockets.get(doctor.socketId);
             if (doctorSocket && doctorSocket.connected) {
-                console.log(`✅ Sending to Dr. ${doctor.name} (${doctor.socketId.substring(0, 8)}...)`);
                 doctorSocket.emit('incoming-call-request', {
                     patientId,
                     patientName,
@@ -214,17 +614,11 @@ io.on('connection', (socket) => {
                 });
                 doctorsNotified++;
             } else {
-                console.log(`❌ Dr. ${doctor.name} socket not connected, removing from list`);
                 onlineDoctors.delete(doctorId);
-                doctorsSkipped++;
             }
         });
 
-        console.log(`📊 Notification Results: ${doctorsNotified} notified, ${doctorsSkipped} skipped`);
-        console.log('========================\n');
-        
         if (doctorsNotified === 0) {
-            console.log('❌ No doctors could be notified');
             socket.emit('call-rejected', {
                 doctorName: 'System',
                 message: 'No doctors available at the moment'
@@ -233,14 +627,12 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Update waiting patients for all doctors
         broadcastWaitingPatients();
         
         // Auto-cancel request after 2 minutes
         setTimeout(() => {
             const request = activeCallRequests.get(requestId);
             if (request && request.status === 'waiting') {
-                console.log(`⏰ Auto-cancelling request ${requestId} after timeout`);
                 activeCallRequests.delete(requestId);
                 const patientSocket = io.sockets.sockets.get(request.patientSocketId);
                 if (patientSocket && patientSocket.connected) {
@@ -251,7 +643,7 @@ io.on('connection', (socket) => {
                 }
                 broadcastWaitingPatients();
             }
-        }, 120000); // 2 minutes
+        }, 120000);
     });
 
     // Doctor accepts call
@@ -275,38 +667,28 @@ io.on('connection', (socket) => {
         }
 
         if (!requestToAccept) {
-            console.log(`❌ Call request not found or already taken for patient ${patientId}`);
             socket.emit('call-taken', { patientId });
             return;
         }
 
-        // Mark request as accepted
+        // Mark request as accepted and create call room
         requestToAccept.status = 'accepted';
         requestToAccept.doctorId = doctorId;
         requestToAccept.doctorName = doctorName;
         requestToAccept.doctorSocketId = socket.id;
 
-        // Create room for the call
         const roomId = `room_${patientId}_${doctorId}_${Date.now()}`;
         
-        console.log(`🏠 Creating call room: ${roomId}`);
-        
-        // Join both users to the room
         socket.join(roomId);
         const patientSocket = io.sockets.sockets.get(requestToAccept.patientSocketId);
         if (patientSocket && patientSocket.connected) {
             patientSocket.join(roomId);
-            console.log('✅ Patient joined room');
-            
-            // Notify patient that call was accepted
             patientSocket.emit('call-accepted', {
                 roomId,
                 doctorName,
                 doctorId
             });
-            console.log('✅ Sent call-accepted to patient');
         } else {
-            console.log('❌ Patient socket not found or disconnected');
             socket.emit('call-failed', { message: 'Patient is no longer available' });
             activeCallRequests.delete(requestId);
             return;
@@ -323,60 +705,42 @@ io.on('connection', (socket) => {
             startTime: Date.now()
         });
 
-        // Notify doctor that call started
         socket.emit('call-started', {
             roomId,
             patientId,
             patientName: requestToAccept.patientName
         });
-        console.log('✅ Sent call-started to doctor');
 
-        // Remove the request and notify other doctors
         activeCallRequests.delete(requestId);
         
         // Notify other doctors that this call was taken
-        console.log('📢 Notifying other doctors that call was taken...');
         onlineDoctors.forEach((doctor, dId) => {
             if (dId !== doctorId) {
                 const doctorSocket = io.sockets.sockets.get(doctor.socketId);
                 if (doctorSocket && doctorSocket.connected) {
                     doctorSocket.emit('call-taken', { patientId });
-                    console.log(`✅ Notified Dr. ${doctor.name} that call was taken`);
                 }
             }
         });
 
         broadcastWaitingPatients();
-        console.log(`🎉 Call successfully established: Dr. ${doctorName} <-> ${requestToAccept.patientName}`);
-        console.log('=====================\n');
     });
 
-    // Doctor rejects call
-    socket.on('reject-call', (data) => {
-        const { patientId, doctorId } = data;
-        console.log(`Dr. ${socket.userName} rejected call from patient ${patientId}`);
-        // Individual rejection - call request remains for other doctors
-    });
-
-    // WebRTC Signaling - Enhanced with logging
+    // WebRTC Signaling
     socket.on('webrtc-offer', (data) => {
         const { roomId, offer } = data;
-        console.log(`📡 WebRTC offer received for room ${roomId} from ${socket.userId}`);
         socket.to(roomId).emit('webrtc-offer', {
             offer,
             from: socket.userId
         });
-        console.log(`📡 WebRTC offer forwarded to room ${roomId}`);
     });
 
     socket.on('webrtc-answer', (data) => {
         const { roomId, answer } = data;
-        console.log(`📡 WebRTC answer received for room ${roomId} from ${socket.userId}`);
         socket.to(roomId).emit('webrtc-answer', {
             answer,
             from: socket.userId
         });
-        console.log(`📡 WebRTC answer forwarded to room ${roomId}`);
     });
 
     socket.on('webrtc-ice-candidate', (data) => {
@@ -393,11 +757,7 @@ io.on('connection', (socket) => {
         const call = activeCalls.get(roomId);
         
         if (call) {
-            console.log(`📞 Call ended in room ${roomId} by ${socket.userName}`);
-            // Notify other participant
             socket.to(roomId).emit('call-ended');
-            
-            // Clean up
             activeCalls.delete(roomId);
         }
     });
@@ -411,14 +771,11 @@ io.on('connection', (socket) => {
         if (socket.userId) {
             console.log(`User: ${socket.userName} (${socket.userType})`);
             
-            // Remove from online users
             onlineUsers.delete(socket.userId);
             
             if (socket.userType === 'doctor') {
                 const removed = onlineDoctors.delete(socket.userId);
                 console.log(`Doctor removed: ${removed}. Remaining doctors: ${onlineDoctors.size}`);
-                
-                // Immediately broadcast updated doctor list to all patients
                 broadcastOnlineDoctors();
                 
             } else if (socket.userType === 'patient') {
@@ -426,36 +783,37 @@ io.on('connection', (socket) => {
                 console.log(`Patient removed: ${removed}. Remaining patients: ${onlinePatients.size}`);
                 
                 // Cancel any active call requests from this patient
-                let requestsCancelled = 0;
                 for (const [requestId, request] of activeCallRequests.entries()) {
                     if (request.patientId === socket.userId) {
-                        console.log(`❌ Cancelling call request ${requestId} due to patient disconnect`);
                         activeCallRequests.delete(requestId);
-                        requestsCancelled++;
                     }
                 }
                 
-                if (requestsCancelled > 0) {
-                    broadcastWaitingPatients();
+                // Clean up chat sessions
+                for (const [sessionId, session] of chatSessions.entries()) {
+                    if (session.patientId === socket.userId) {
+                        console.log(`🗑️ Cleaning up chat session ${sessionId}`);
+                        chatSessions.delete(sessionId);
+                    }
                 }
+                
+                broadcastWaitingPatients();
             }
 
             // End any active calls this user was in
             for (const [roomId, call] of activeCalls.entries()) {
                 if (call.patientId === socket.userId || call.doctorId === socket.userId) {
-                    console.log(`📞 Ending call ${roomId} due to user disconnect`);
                     socket.to(roomId).emit('call-ended');
                     activeCalls.delete(roomId);
                 }
             }
         }
         
-        console.log('======================\n');
         logState();
     });
 });
 
-// Enhanced broadcast functions with better error handling
+// Enhanced broadcast functions
 function broadcastOnlineDoctors() {
     const doctorsList = Array.from(onlineDoctors.values()).map(doctor => ({
         id: doctor.id,
@@ -467,7 +825,6 @@ function broadcastOnlineDoctors() {
     console.log(`📢 Broadcasting ${doctorsList.length} online doctors to ${onlinePatients.size} patients`);
     
     let patientsNotified = 0;
-    let patientsSkipped = 0;
     
     onlinePatients.forEach((patient, patientId) => {
         const patientSocket = io.sockets.sockets.get(patient.socketId);
@@ -477,11 +834,10 @@ function broadcastOnlineDoctors() {
         } else {
             console.log(`⚠️ Patient ${patient.name} socket disconnected, removing from list`);
             onlinePatients.delete(patientId);
-            patientsSkipped++;
         }
     });
     
-    console.log(`📊 Doctor list broadcast: ${patientsNotified} patients notified, ${patientsSkipped} removed`);
+    console.log(`📊 Doctor list broadcast: ${patientsNotified} patients notified`);
 }
 
 function broadcastWaitingPatients() {
@@ -497,7 +853,6 @@ function broadcastWaitingPatients() {
     console.log(`📢 Broadcasting ${waitingPatients.length} waiting patients to ${onlineDoctors.size} doctors`);
     
     let doctorsNotified = 0;
-    let doctorsSkipped = 0;
     
     onlineDoctors.forEach((doctor, doctorId) => {
         const doctorSocket = io.sockets.sockets.get(doctor.socketId);
@@ -507,11 +862,10 @@ function broadcastWaitingPatients() {
         } else {
             console.log(`⚠️ Doctor ${doctor.name} socket disconnected, removing from list`);
             onlineDoctors.delete(doctorId);
-            doctorsSkipped++;
         }
     });
     
-    console.log(`📊 Waiting patients broadcast: ${doctorsNotified} doctors notified, ${doctorsSkipped} removed`);
+    console.log(`📊 Waiting patients broadcast: ${doctorsNotified} doctors notified`);
 }
 
 // ---------------- REST API Routes ----------------
@@ -654,17 +1008,101 @@ app.post("/api/auth/doctor/login", async (req, res) => {
     }
 });
 
+// NEW: AI Chat endpoint for REST API access
+app.post("/api/ai-chat", async (req, res) => {
+    const { message, sessionId, patientId, patientName } = req.body;
+
+    if (!message) {
+        return res.status(400).json({ message: "Message is required" });
+    }
+
+    try {
+        let session = chatSessions.get(sessionId);
+        
+        // Create new session if doesn't exist
+        if (!session && patientId && patientName) {
+            const newSessionId = sessionId || `chat_${patientId}_${Date.now()}`;
+            session = {
+                sessionId: newSessionId,
+                patientId,
+                patientName,
+                chatHistory: [],
+                messageCount: 0,
+                startTime: Date.now(),
+                lastActivity: Date.now(),
+                prescriptionGenerated: false
+            };
+            chatSessions.set(newSessionId, session);
+        }
+
+        if (!session) {
+            return res.status(400).json({ message: "Session not found and insufficient data to create new session" });
+        }
+
+        // Generate AI response
+        const aiResponse = await generateAIResponse(session.sessionId, message, session.chatHistory);
+        
+        // Update session history
+        session.chatHistory.push(
+            { sender: 'user', content: message, timestamp: Date.now() },
+            { sender: 'ai', content: aiResponse, timestamp: Date.now() }
+        );
+
+        res.json({
+            sessionId: session.sessionId,
+            aiResponse,
+            messageCount: session.messageCount
+        });
+
+    } catch (error) {
+        console.error("AI Chat API error:", error);
+        res.status(500).json({ message: "Error processing AI chat request" });
+    }
+});
+
+// NEW: Get prescription details
+app.get("/api/prescription/:prescriptionId", (req, res) => {
+    const { prescriptionId } = req.params;
+    const prescription = pendingPrescriptions.get(prescriptionId);
+    
+    if (!prescription) {
+        return res.status(404).json({ message: "Prescription not found" });
+    }
+
+    res.json(prescription);
+});
+
+// NEW: Get all prescriptions for a patient
+app.get("/api/prescriptions/patient/:patientId", (req, res) => {
+    const { patientId } = req.params;
+    
+    const patientPrescriptions = Array.from(pendingPrescriptions.values())
+        .filter(presc => presc.patientId === patientId);
+    
+    res.json(patientPrescriptions);
+});
+
+// NEW: Get pending prescriptions for doctors
+app.get("/api/prescriptions/pending", (req, res) => {
+    const pendingPrescriptionsList = Array.from(pendingPrescriptions.values())
+        .filter(presc => presc.status === 'pending_approval');
+    
+    res.json(pendingPrescriptionsList);
+});
+
 // Enhanced health check endpoint
 app.get("/api/health", (req, res) => {
     const connectedSockets = io.sockets.sockets.size;
     res.json({ 
-        message: "Server is running", 
+        message: "Server is running with AI integration", 
         timestamp: new Date().toISOString(),
         connectedSockets: connectedSockets,
         onlineDoctors: onlineDoctors.size,
         onlinePatients: onlinePatients.size,
         activeCalls: activeCalls.size,
         activeRequests: activeCallRequests.size,
+        activeChatSessions: chatSessions.size,
+        pendingPrescriptions: pendingPrescriptions.size,
         doctorsList: Array.from(onlineDoctors.values()).map(d => ({
             id: d.id,
             name: d.name,
@@ -678,14 +1116,16 @@ app.get("/api/health", (req, res) => {
     });
 });
 
-// Test endpoint for cross-device debugging
+// Enhanced debug endpoint
 app.get("/api/debug", (req, res) => {
     res.json({
         timestamp: new Date().toISOString(),
         server: {
             connectedSockets: io.sockets.sockets.size,
             onlineDoctors: onlineDoctors.size,
-            onlinePatients: onlinePatients.size
+            onlinePatients: onlinePatients.size,
+            activeChatSessions: chatSessions.size,
+            pendingPrescriptions: pendingPrescriptions.size
         },
         doctors: Array.from(onlineDoctors.entries()).map(([id, doc]) => ({
             id,
@@ -704,8 +1144,53 @@ app.get("/api/debug", (req, res) => {
             patientName: req.patientName,
             status: req.status,
             timestamp: new Date(req.timestamp).toISOString()
+        })),
+        chatSessions: Array.from(chatSessions.entries()).map(([id, session]) => ({
+            sessionId: id,
+            patientName: session.patientName,
+            messageCount: session.messageCount,
+            startTime: new Date(session.startTime).toISOString(),
+            prescriptionGenerated: session.prescriptionGenerated
+        })),
+        prescriptions: Array.from(pendingPrescriptions.entries()).map(([id, presc]) => ({
+            prescriptionId: id,
+            patientName: presc.patientName,
+            status: presc.status,
+            createdAt: new Date(presc.createdAt).toISOString()
         }))
     });
+});
+
+// NEW: Test OpenAI connection
+app.get("/api/test-ai", async (req, res) => {
+    try {
+        const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: "You are a helpful medical AI assistant." },
+                { role: "user", content: "Say hello and confirm you're working properly." }
+            ],
+            max_tokens: 50,
+            temperature: 0.7,
+        });
+
+        const response = completion.choices[0].message.content;
+        
+        res.json({
+            success: true,
+            message: "OpenAI connection successful",
+            aiResponse: response,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error("OpenAI test error:", error);
+        res.status(500).json({
+            success: false,
+            message: "OpenAI connection failed",
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Start server with enhanced logging
@@ -713,7 +1198,16 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🛠 Debug endpoint: http://localhost:${PORT}/api/debug`);
+    console.log(`🤖 AI test endpoint: http://localhost:${PORT}/api/test-ai`);
     console.log(`🔌 Socket.IO server initialized with CORS enabled`);
+    console.log(`🧠 OpenAI integration enabled for medical consultation`);
     console.log(`📱 Server accessible from other devices on your network`);
     console.log('==========================================');
+    
+    // Validate OpenAI connection on startup
+    if (process.env.OPENAI_API_KEY) {
+        console.log('✅ OpenAI API key found in environment variables');
+    } else {
+        console.log('❌ OpenAI API key not found - AI features will not work');
+    }
 });
