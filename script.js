@@ -1,1756 +1,1934 @@
-// Merged script.js - Combined main video call functionality with AI chat integration
-// Enhanced AI Health Mate Script with OpenAI Integration and Full WebRTC Implementation
-
-// ------------------ Global Variables ------------------
-let socket = null;
-let localStream = null;
-let remoteStream = null;
-let peerConnection = null;
-let isCallActive = false;
-let currentRoomId = null;
-let currentUserId = null;
-let currentUser = null;
-let currentSection = 'home';
-let isMuted = false;
-let isCameraOff = false;
-
-// NEW: AI Chat Variables
-let currentChatSession = null;
-let isAIChatActive = false;
-let chatHistory = [];
-
-// Navigation history for back button functionality
-let navigationHistory = ['home'];
-
-// WebRTC Configuration
-const rtcConfig = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-    ]
-};
-
-// Socket.IO Configuration
-const SOCKET_CONFIG = {
-    transports: ['websocket', 'polling'],
-    upgrade: true,
-    rememberUpgrade: true,
-    timeout: 20000,
-    forceNew: true
-};
-
-const API_BASE = "http://localhost:5000/api/auth";
-
-// Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 AI Health Mate initialized');
-    initializeApp();
-});
-
-function initializeApp() {
-    // Set up event listeners
-    setupEventListeners();
-    
-    // Initialize socket connection
-    initializeSocket();
-    
-    // Check for saved user session
-    checkUserSession();
-    
-    // Initialize dark mode
-    initializeDarkMode();
-    
-    // Initialize notification system
-    initializeNotifications();
-    
-    console.log('✅ Application initialized successfully');
+/* CSS Styles */
+:root {
+    --primary-color: #2563eb;
+    --primary-dark: #1d4ed8;
+    --secondary-color: #10b981;
+    --accent-color: #f59e0b;
+    --danger-color: #ef4444;
+    --text-dark: #1f2937;
+    --text-light: #6b7280;
+    --bg-light: #f8fafc;
+    --bg-white: #ffffff;
+    --border-color: #e5e7eb;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-function setupEventListeners() {
-    // Contact form
-    const contactForm = document.getElementById('contactForm');
-    if (contactForm) {
-        contactForm.addEventListener('submit', handleContactForm);
-    }
-
-    // Login forms
-    const patientLoginForm = document.getElementById('patientLoginForm');
-    if (patientLoginForm) {
-        patientLoginForm.addEventListener('submit', handlePatientLogin);
-    }
-
-    const doctorLoginForm = document.getElementById('doctorLoginForm');
-    if (doctorLoginForm) {
-        doctorLoginForm.addEventListener('submit', handleDoctorLogin);
-    }
-
-    // Signup forms
-    const patientSignupForm = document.getElementById('patientSignupForm');
-    if (patientSignupForm) {
-        patientSignupForm.addEventListener('submit', handlePatientSignup);
-    }
-
-    const doctorSignupForm = document.getElementById('doctorSignupForm');
-    if (doctorSignupForm) {
-        doctorSignupForm.addEventListener('submit', handleDoctorSignup);
-    }
-
-    // Chat input
-    const symptomInput = document.getElementById('symptomInput');
-    if (symptomInput) {
-        symptomInput.addEventListener('keypress', handleChatKeyPress);
-        // Add click event listener to debug focus issues
-        symptomInput.addEventListener('click', () => {
-            console.log('symptomInput clicked, disabled:', symptomInput.disabled);
-            if (!symptomInput.disabled) {
-                symptomInput.focus();
-            }
-        });
-    } else {
-        console.warn('symptomInput element not found in DOM');
-    }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-function initializeSocket() {
-    try {
-        // Try to connect to local server first, then fallback to other addresses
-        const possibleHosts = [
-            window.location.origin,
-            'http://localhost:5000',
-            'http://127.0.0.1:5000'
-        ];
-
-        let hostIndex = 0;
-        
-        function tryConnection() {
-            if (hostIndex >= possibleHosts.length) {
-                console.error('❌ Could not connect to any server');
-                showNotification('Unable to connect to server. Please check if the server is running.', 'error');
-                return;
-            }
-
-            const currentHost = possibleHosts[hostIndex];
-            console.log(`🔌 Attempting to connect to: ${currentHost}`);
-
-            socket = io(currentHost, SOCKET_CONFIG);
-
-            socket.on('connect', () => {
-                console.log(`✅ Connected to server: ${currentHost}`);
-                console.log(`📡 Socket ID: ${socket.id}`);
-                setupSocketListeners();
-                updateConnectionStatus('Connected');
-                
-                // Join as user if logged in
-                if (currentUser) {
-                    joinAsUser();
-                }
-            });
-
-            socket.on('connect_error', (error) => {
-                console.log(`❌ Connection failed to ${currentHost}:`, error.message);
-                socket.disconnect();
-                hostIndex++;
-                setTimeout(tryConnection, 1000);
-            });
-
-            socket.on('disconnect', (reason) => {
-                console.log('❌ Disconnected from server:', reason);
-                updateConnectionStatus('Disconnected');
-                
-                if (reason === 'io server disconnect') {
-                    // Server disconnected, try to reconnect
-                    setTimeout(() => socket.connect(), 2000);
-                }
-            });
-        }
-
-        tryConnection();
-
-    } catch (error) {
-        console.error('Socket initialization error:', error);
-        showNotification('Failed to initialize connection', 'error');
-    }
+body {
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+    color: var(--text-dark);
+    background-color: var(--bg-light);
 }
 
-function setupSocketListeners() {
-    // User join confirmation
-    socket.on('join-confirmed', (data) => {
-        console.log('✅ Join confirmed:', data);
-        updateOnlineCounters(data.onlineDoctors, data.onlinePatients);
-    });
-
-    // Online doctors list (for patients)
-    socket.on('doctors-online', (doctors) => {
-        console.log('👨‍⚕️ Online doctors updated:', doctors);
-        updateOnlineDoctorsUI(doctors);
-    });
-
-    // Waiting patients (for doctors)
-    socket.on('waiting-patients', (patients) => {
-        console.log('⏳ Waiting patients updated:', patients);
-        updateWaitingPatientsUI(patients);
-    });
-
-    // NEW: AI Chat Event Listeners
-    socket.on('ai-chat-started', (data) => {
-        console.log('🤖 AI Chat started:', data);
-        currentChatSession = data.sessionId;
-        isAIChatActive = true;
-        
-        // Add AI welcome message to chat
-        addChatMessage('ai', data.message);
-        showNotification('AI consultation started successfully', 'success');
-        enableChatInput(); // Ensure input is enabled after chat starts
-    });
-
-    socket.on('ai-chat-response', (data) => {
-        console.log('🤖 AI Response received:', data);
-        addChatMessage('ai', data.message);
-        enableChatInput();
-    });
-
-    socket.on('ai-chat-error', (data) => {
-        console.error('❌ AI Chat error:', data);
-        showNotification(data.message, 'error');
-        enableChatInput();
-    });
-
-    // NEW: Prescription Event Listeners
-    socket.on('prescription-generated', (data) => {
-        console.log('📋 Prescription generated:', data);
-        showNotification(data.message, 'success');
-        addChatMessage('ai', data.message);
-    });
-
-    socket.on('prescription-approved', (data) => {
-        console.log('✅ Prescription approved:', data);
-        showNotification(data.message, 'success');
-        
-        // Show prescription in chat
-        const prescriptionMessage = `
-            <div class="prescription-approved">
-                <h4>✅ Prescription Approved by ${data.doctorName}</h4>
-                <div class="prescription-content">
-                    ${data.content.replace(/\n/g, '<br>')}
-                </div>
-                <button onclick="downloadPrescription('${data.prescriptionId}')" class="btn btn-outline">
-                    <i class="fas fa-download"></i> Download PDF
-                </button>
-            </div>
-        `;
-        addChatMessage('ai', prescriptionMessage);
-    });
-
-    socket.on('prescription-rejected', (data) => {
-        console.log('❌ Prescription rejected:', data);
-        showNotification(data.message, 'error');
-        addChatMessage('ai', `Your consultation has been reviewed by ${data.doctorName}. ${data.reason ? `Reason: ${data.reason}` : ''} Please consider scheduling a video consultation for personalized care.`);
-    });
-
-    // NEW: Doctor prescription notifications
-    socket.on('new-prescription-approval', (prescriptionData) => {
-        console.log('📋 New prescription for approval:', prescriptionData);
-        
-        if (currentUser && currentUser.userType === 'doctor') {
-            showNotification(`New prescription from AI consultation requires your approval`, 'info');
-            addPrescriptionToApprovalList(prescriptionData);
-        }
-    });
-
-    socket.on('pending-prescriptions-list', (prescriptions) => {
-        console.log('📋 Pending prescriptions list:', prescriptions);
-        
-        if (currentUser && currentUser.userType === 'doctor') {
-            displayPendingPrescriptions(prescriptions);
-        }
-    });
-
-    // Video call event listeners
-    socket.on('incoming-call-request', (data) => {
-        console.log('📞 Incoming call request:', data);
-        showIncomingCallDialogEnhanced(data.patientId, data.patientName, data.requestId);
-    });
-
-    socket.on('call-accepted', (data) => {
-        console.log('Call accepted:', data);
-        const { roomId, doctorName, doctorId } = data;
-        currentRoomId = roomId;
-        showNotification(`Dr. ${doctorName} accepted your call!`, 'success');
-        updateVideoCallUI('call-accepted');
-        startWebRTCCall(true); // Patient initiates the call
-    });
-
-    socket.on('call-rejected', (data) => {
-        console.log('Call rejected:', data);
-        const { doctorName, message } = data;
-        showNotification(message || `Call rejected`, 'error');
-        resetVideoCallUI();
-    });
-
-    socket.on('call-taken', (data) => {
-        console.log('Call taken by another doctor:', data);
-        const { patientId } = data;
-        removeCallRequest(patientId);
-    });
-
-    socket.on('call-started', (data) => {
-        const { roomId, patientId, patientName } = data;
-        console.log('Call started:', data);
-        currentRoomId = roomId;
-        showNotification(`Call started with ${patientName}`, 'success');
-        updateVideoCallUI('call-started');
-        startWebRTCCall(false); // Doctor waits for offer
-    });
-
-    socket.on('call-ended', () => {
-        console.log('Call ended by other party');
-        endVideoCall();
-        showNotification('Call ended', 'info');
-    });
-
-    // WebRTC signaling events
-    socket.on('webrtc-offer', async (data) => {
-        console.log('Received WebRTC offer:', data);
-        const { offer, from } = data;
-        await handleWebRTCOffer(offer);
-    });
-
-    socket.on('webrtc-answer', async (data) => {
-        console.log('Received WebRTC answer:', data);
-        const { answer, from } = data;
-        await handleWebRTCAnswer(answer);
-    });
-
-    socket.on('webrtc-ice-candidate', async (data) => {
-        const { candidate, from } = data;
-        await handleICECandidate(candidate);
-    });
+/* Back Button Styles - NEW ADDITION */
+.back-button {
+    background: var(--bg-light);
+    border: 1px solid var(--border-color);
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-dark);
+    text-decoration: none;
+    cursor: pointer;
+    margin-bottom: 2rem;
+    transition: all 0.2s ease;
+    font-weight: 500;
 }
 
-// ------------------ Navigation ------------------
-function showSection(sectionId) {
-    console.log(`🔄 Navigating to section: ${sectionId}`);
-    
-    document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
-    const targetSection = document.getElementById(sectionId);
-    if (targetSection) {
-        targetSection.classList.add('active');
-        currentSection = sectionId;
-        
-        // Add to navigation history if not going back
-        if (navigationHistory[navigationHistory.length - 1] !== sectionId) {
-            navigationHistory.push(sectionId);
-        }
-        
-        // Special handling for AI chat
-        if (sectionId === 'ai-chat') {
-            if (!isAIChatActive && currentUser) {
-                setTimeout(() => {
-                    startAIChat();
-                }, 500);
-            } else if (currentUser) {
-                // Ensure input is enabled when navigating to ai-chat
-                enableChatInput();
-            }
-        }
-        
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+.back-button:hover {
+    background: var(--border-color);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
 }
 
-function handleBackButton() {
-    console.log('⬅️ Back button pressed');
-    
-    // Remove current section from history
-    if (navigationHistory.length > 1) {
-        navigationHistory.pop();
-    }
-    
-    // Get previous section
-    const previousSection = navigationHistory[navigationHistory.length - 1];
-    
-    // Navigate based on current user state
-    let targetSection = previousSection;
-    
-    if (currentSection === 'ai-chat' || currentSection === 'video-call') {
-        if (currentUser) {
-            targetSection = currentUser.userType === 'patient' ? 'patient-dashboard' : 'doctor-dashboard';
-        } else {
-            targetSection = 'home';
-        }
-    }
-    
-    console.log(`🎯 Navigating back to: ${targetSection}`);
-    showSection(targetSection);
+.back-button i {
+    font-size: 0.875rem;
 }
 
-// ------------------ Notifications ------------------
-function showNotification(message, type = "success") {
-    const note = document.createElement("div");
-    note.className = `notification ${type}`;
-    note.innerText = message;
-    document.body.appendChild(note);
-
-    setTimeout(() => note.classList.add("show"), 50);
-    setTimeout(() => {
-        note.classList.remove("show");
-        setTimeout(() => note.remove(), 300);
-    }, 3000);
+/* Navigation */
+.navbar {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    padding: 1rem 0;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
 }
 
-// ------------------ Authentication ------------------
-
-let userSession = {
-    token: null,
-    user: null,
-    userType: null
-};
-
-// ---------- Patient Login ----------
-async function handlePatientLogin(event) {
-    event.preventDefault();
-
-    const email = document.getElementById("patientEmail").value;
-    const password = document.getElementById("patientPassword").value;
-
-    if (!email || !password) {
-        showNotification("Please fill in all fields", "error");
-        return;
-    }
-
-    try {
-        const res = await fetch(`${API_BASE}/patient/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password })
-        });
-
-        let data;
-        try {
-            data = await res.json();
-        } catch {
-            throw new Error("Server did not return JSON: " + await res.text());
-        }
-
-        if (!res.ok) throw new Error(data.message || "Login failed");
-
-        userSession.token = data.token;
-        userSession.user = data.user;
-        userSession.userType = "patient";
-        currentUserId = data.user._id;
-        currentUser = { ...data.user, userType: 'patient' };
-
-        showNotification(`Welcome ${data.user.name}`, "success");
-        
-        const patientNameEl = document.getElementById("patientName");
-        if (patientNameEl) {
-            patientNameEl.textContent = data.user.name;
-        }
-        
-        // Ensure socket is initialized
-        if (!socket) {
-            console.log('Socket not initialized, calling initializeSocket...');
-            initializeSocket();
-        }
-
-        // Join as user
-        if (socket && socket.connected) {
-            joinAsUser();
-        } else {
-            console.log('Socket not connected, waiting for connection...');
-            if (socket) {
-                socket.on('connect', () => {
-                    console.log('Socket connected, joining as user...');
-                    joinAsUser();
-                });
-            }
-            // Add a timeout to handle connection failure
-            setTimeout(() => {
-                if (socket && !socket.connected) {
-                    showNotification("Failed to connect to server. Real-time features may be unavailable.", "warning");
-                    // Proceed to dashboard even if socket is not connected
-                    showSection('patient-dashboard');
-                }
-            }, 5000); // Wait 5 seconds for connection
-        }
-        
-        // Save session
-        localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        
-        // Show dashboard immediately
-        showSection('patient-dashboard');
-    } catch (err) {
-        console.error("Login error:", err);
-        showNotification(err.message || "Something went wrong. Please try again!", "error");
-    }
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 2rem;
 }
 
-// ------------------ Patient Signup ------------------
-async function handlePatientSignup(event) {
-    event.preventDefault();
-
-    const payload = {
-        name: document.getElementById("signupName").value,
-        email: document.getElementById("signupEmail").value,
-        phone: document.getElementById("signupPhone").value,
-        age: document.getElementById("signupAge").value,
-        password: document.getElementById("signupPassword").value
-    };
-
-    if (!payload.name || !payload.email || !payload.phone || !payload.age || !payload.password) {
-        showNotification("Please fill in all fields", "error");
-        return;
-    }
-                            
-    try {
-        const res = await fetch(`${API_BASE}/patient/signup`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        let data;
-        try {
-            data = await res.json();
-        } catch (jsonErr) {
-            const text = await res.text();
-            throw new Error("Server did not return JSON. Response: " + text);
-        }
-
-        if (!res.ok) throw new Error(data.message || "Signup failed");
-
-        showNotification("Patient account created! Please log in.", "success");
-        showSection("patient-login");
-
-    } catch (err) {
-        console.error("Signup error:", err);
-        showNotification(err.message, "error");
-    }
+.logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
-// ---------- Doctor Login ----------
-async function handleDoctorLogin(event) {
-    event.preventDefault();
+.nav-links {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+    align-items: center;
+}
 
-    const email = document.getElementById("doctorEmail").value;
-    const password = document.getElementById("doctorPassword").value;
+.nav-links a {
+    text-decoration: none;
+    color: var(--text-dark);
+    font-weight: 500;
+    transition: color 0.3s ease;
+    cursor: pointer;
+}
 
-    if (!email || !password) {
-        showNotification("Please fill in all fields", "error");
-        return;
+.nav-links a:hover {
+    color: var(--primary-color);
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.btn-outline:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* Sections */
+.section {
+    min-height: 100vh;
+    padding: 6rem 2rem 2rem;
+    display: none;
+}
+
+.section.active {
+    display: block;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Home Section */
+.hero {
+    display: flex;
+    align-items: center;
+    min-height: 90vh;
+    background: var(--gradient);
+    color: white;
+    margin: -4rem -2rem 2rem;
+    padding: 6rem 2rem 2rem;
+}
+
+.hero-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.hero-text h1 {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    line-height: 1.1;
+}
+
+.hero-text p {
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
+    opacity: 0.9;
+}
+
+.hero-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.hero-image {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.hero-image i {
+    font-size: 20rem;
+    opacity: 0.8;
+}
+
+/* Features */
+.features {
+    padding: 4rem 0;
+    background: white;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-top: 3rem;
+}
+
+.feature-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+.feature-card:hover {
+    transform: translateY(-5px);
+}
+
+.feature-icon {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+/* Chat Interface */
+.chat-container {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-header {
+    padding: 1.5rem;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 1rem 1rem 0 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    background: var(--bg-light);
+}
+
+.message {
+    display: flex;
+    margin-bottom: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.message.user {
+    justify-content: flex-end;
+}
+
+.message-content {
+    max-width: 70%;
+    padding: 1rem;
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+}
+
+.message.user .message-content {
+    background: var(--primary-color);
+    color: white;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.message.ai .message-content {
+    background: white;
+    border-bottom-left-radius: 0.25rem;
+}
+
+.chat-input {
+    padding: 1rem;
+    background: white;
+    border-radius: 0 0 1rem 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.input-group {
+    display: flex;
+    gap: 1rem;
+}
+
+.input-group input {
+    flex: 1;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.input-group input:focus {
+    border-color: var(--primary-color);
+}
+
+/* Video Call */
+.video-container {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    padding: 2rem;
+    text-align: center;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.video-placeholder {
+    background: var(--bg-light);
+    border-radius: 1rem;
+    padding: 4rem 2rem;
+    border: 2px dashed var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.video-placeholder i {
+    font-size: 4rem;
+    color: var(--text-light);
+}
+
+video {
+    width: 100%;
+    height: 300px;
+    border-radius: 1rem;
+    background: black;
+}
+
+.video-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+/* Forms */
+.form-container {
+    max-width: 500px;
+    margin: 0 auto;
+    background: white;
+    padding: 3rem;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-dark);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--primary-color);
+}
+
+/* Dashboard */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.dashboard-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+}
+
+.dashboard-card h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+}
+
+.stats {
+    display: flex;
+    justify-content: space-between;
+    margin: 1rem 0;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Prescription */
+.prescription-card {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.prescription-header {
+    background: var(--bg-light);
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.prescription-content {
+    padding: 1.5rem;
+}
+
+.medication-list {
+    list-style: none;
+    margin: 1rem 0;
+}
+
+.medication-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.medication-list li:last-child {
+    border-bottom: none;
+}
+
+.prescription-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 2rem;
+}
+
+/* Notifications */
+.notification {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    background: var(--secondary-color);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 1001;
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification.error {
+    background: var(--danger-color);
+}
+
+/* Loading */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border-color);
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Dark Mode */
+.dark-mode {
+    --text-dark: #f9fafb;
+    --text-light: #d1d5db;
+    --bg-light: #111827;
+    --bg-white: #1f2937;
+    --border-color: #374151;
+}
+
+.dark-mode-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+.dark-mode-toggle:hover {
+    transform: scale(1.1);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
     }
-
-    try {
-        const res = await fetch(`${API_BASE}/doctor/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password })
-        });
-
-        let data;
-        try {
-            data = await res.json();
-        } catch {
-            throw new Error("Server did not return JSON: " + await res.text());
-        }
-
-        if (!res.ok) throw new Error(data.message || "Login failed");
-
-        userSession.token = data.token;
-        userSession.user = data.user;
-        userSession.userType = "doctor";
-        currentUserId = data.user._id;
-        currentUser = { ...data.user, userType: 'doctor' };
-
-        showNotification(`Welcome Dr. ${data.user.name}`, "success");
-        
-        const doctorNameEl = document.getElementById("doctorName");
-        if (doctorNameEl) {
-            doctorNameEl.textContent = `Dr. ${data.user.name}`;
-        }
-        
-        // Ensure socket is initialized
-        if (!socket) {
-            console.log('Socket not initialized, calling initializeSocket...');
-            initializeSocket();
-        }
-
-        // Join as user
-        if (socket && socket.connected) {
-            joinAsUser();
-        } else {
-            console.log('Socket not connected, waiting for connection...');
-            if (socket) {
-                socket.on('connect', () => {
-                    console.log('Socket connected, joining as user...');
-                    joinAsUser();
-                });
-            }
-            // Add a timeout to handle connection failure
-            setTimeout(() => {
-                if (socket && !socket.connected) {
-                    showNotification("Failed to connect to server. Real-time features may be unavailable.", "warning");
-                    // Proceed to dashboard even if socket is not connected
-                    showSection('doctor-dashboard');
-                }
-            }, 5000); // Wait 5 seconds for connection
-        }
-        
-        // Save session
-        localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        
-        // Show dashboard immediately
-        showSection('doctor-dashboard');
-    } catch (err) {
-        console.error("Login error:", err);
-        showNotification(err.message || "Something went wrong. Please try again!", "error");
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
-// ---------- Doctor Signup ----------
-async function handleDoctorSignup(event) {
-    event.preventDefault();
-
-    const payload = {
-        name: document.getElementById("doctorSignupName").value,
-        email: document.getElementById("doctorSignupEmail").value,
-        license: document.getElementById("doctorSignupLicense").value,
-        specialty: document.getElementById("doctorSignupSpecialty").value,
-        password: document.getElementById("doctorSignupPassword").value
-    };
-
-    if (!payload.name || !payload.email || !payload.license || !payload.specialty || !payload.password) {
-        showNotification("Please fill in all fields", "error");
-        return;
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
     }
-
-    try {
-        const res = await fetch(`${API_BASE}/doctor/signup`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        let data;
-        try {
-            data = await res.json();
-        } catch (jsonErr) {
-            const text = await res.text();
-            throw new Error("Server did not return JSON. Response: " + text);
-        }
-
-        if (!res.ok) throw new Error(data.message || "Signup failed");
-
-        showNotification("Doctor account created! Please log in.", "success");
-        showSection("doctor-login");
-
-    } catch (err) {
-        console.error("Signup error:", err);
-        showNotification(err.message, "error");
+    100% {
+        transform: rotate(360deg);
     }
 }
 
-// ---------- Logout ----------
-function logout() {
-    console.log('👋 User logging out');
-    
-    if (socket) {
-        socket.disconnect();
-    }
-    
-    if (isCallActive) {
-        endVideoCall();
-    }
-    
-    // Clear user data
-    currentUser = null;
-    currentChatSession = null;
-    isAIChatActive = false;
-    chatHistory = [];
-    
-    userSession = {
-        token: null,
-        user: null,
-        userType: null
-    };
-    currentUserId = null;
-    
-    // Clear storage
-    localStorage.removeItem('currentUser');
-    
-    // Reset UI
-    clearChatMessages();
-    
-    showNotification("Logged out successfully");
-    showSection("home");
-    
-    // Reinitialize socket
-    setTimeout(initializeSocket, 1000);
-}
-
-// ------------------ Real-time Video Call Functions ------------------
-
-// Patient requests video call
-async function startVideoCall() {
-    console.log('Starting video call...');
-    
-    if (!socket || !currentUser) {
-        showNotification("Please login first", "error");
-        return;
+/* Responsive Design */
+@media (max-width: 768px) {
+    .nav-links {
+        display: none;
     }
 
-    if (!socket.connected) {
-        showNotification("Connection lost. Please refresh and try again.", "error");
-        return;
+    .hero-content {
+        grid-template-columns: 1fr;
+        text-align: center;
     }
 
-    try {
-        // Get user media with better constraints
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                frameRate: { ideal: 30 }
-            }, 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            }
-        });
-        
-        console.log('Got local stream');
-        
-        // Show local video
-        displayLocalVideo();
-        
-        // Only patients should request calls to doctors
-        if (currentUser.userType === 'patient') {
-            console.log('Sending video call request...');
-            socket.emit('request-video-call', {
-                patientId: currentUser._id,
-                patientName: currentUser.name
-            });
-            
-            showNotification("Requesting video call with available doctors...", "info");
-            updateVideoCallUI('requesting');
-        } else if (currentUser.userType === 'doctor') {
-            showNotification("Video call started. Waiting for patient...", "info");
-            updateVideoCallUI('call-started');
-        }
-        
-    } catch (err) {
-        console.error("Video call error:", err);
-        let errorMessage = "Could not access camera/microphone";
-        
-        if (err.name === 'NotAllowedError') {
-            errorMessage = "Camera/microphone access denied. Please allow permissions and try again.";
-        } else if (err.name === 'NotFoundError') {
-            errorMessage = "No camera or microphone found. Please check your devices.";
-        } else if (err.name === 'NotReadableError') {
-            errorMessage = "Camera or microphone is already in use by another application.";
-        }
-        
-        showNotification(errorMessage, "error");
-        resetVideoCallUI();
+    .hero-text h1 {
+        font-size: 2.5rem;
+    }
+
+    .hero-image i {
+        font-size: 10rem;
+    }
+
+    .video-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero-buttons {
+        justify-content: center;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .back-button {
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 1rem;
     }
 }
 
-// Display local video stream
-function displayLocalVideo() {
-    const localVideo = document.getElementById("localVideo");
-    const placeholder = document.getElementById("localVideoPlaceholder");
-    
-    if (localVideo && localStream) {
-        localVideo.srcObject = localStream;
-        localVideo.style.display = "block";
-        if (placeholder) placeholder.style.display = "none";
-        
-        console.log('Local video displayed');
-        updateConnectionStatus("Connected");
+/* Video call Style  */
+
+/* Add these styles to your existing style.css file */
+
+/* Video Call Specific Styles */
+#localVideo, #remoteVideo {
+    width: 100%;
+    height: 300px;
+    border-radius: 1rem;
+    background: black;
+    object-fit: cover;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin: 2rem 0;
+    position: relative;
+}
+
+.video-container {
+    position: relative;
+}
+
+.video-status {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+}
+
+/* Incoming Call Dialog */
+.incoming-call-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s ease;
+}
+
+.call-dialog-content {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    max-width: 400px;
+    width: 90%;
+    overflow: hidden;
+}
+
+.call-dialog-header {
+    background: var(--primary-color);
+    color: white;
+    padding: 1.5rem;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.call-dialog-header i {
+    font-size: 2rem;
+    animation: pulse 2s infinite;
+}
+
+.call-dialog-body {
+    padding: 2rem;
+    text-align: center;
+}
+
+.call-dialog-body p {
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+}
+
+.call-dialog-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Online Status Indicators */
+.online {
+    color: var(--secondary-color);
+}
+
+.busy {
+    color: var(--accent-color);
+}
+
+.offline {
+    color: var(--text-light);
+}
+
+/* Doctor and Patient Lists */
+.doctor-item,
+.patient-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.doctor-item:hover,
+.patient-item:hover {
+    background-color: var(--bg-light);
+}
+
+.doctor-info,
+.patient-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.doctor-info i,
+.patient-info i {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.doctor-info .fas.fa-circle.online {
+    color: var(--secondary-color);
+}
+
+.doctor-info .fas.fa-circle.busy {
+    color: var(--accent-color);
+}
+
+.doctor-status {
+    font-size: 0.8rem;
+    color: var(--text-light);
+    text-transform: capitalize;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+}
+
+/* Dashboard Containers */
+#onlineDoctorsContainer,
+#waitingPatientsContainer {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+#onlineDoctorsContainer h4,
+#waitingPatientsContainer h4 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Video Call Connection Status */
+.connection-status {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    text-align: center;
+    z-index: 10;
+}
+
+.connection-spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+/* Call Controls Enhancement */
+.video-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding: 1rem;
+    background: var(--bg-light);
+    border-radius: 1rem;
+}
+
+.video-controls button {
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* Pulse Animation for Incoming Calls */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
     }
 }
 
-// Display remote video stream
-function displayRemoteVideo() {
-    const localVideo = document.getElementById("remoteVideo");
-    const placeholder = document.getElementById("remoteVideoPlaceholder");
+/* Call Quality Indicator */
+.call-quality {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.quality-excellent {
+    color: var(--secondary-color);
+}
+
+.quality-good {
+    color: var(--accent-color);
+}
+
+.quality-poor {
+    color: var(--danger-color);
+}
+
+/* Responsive Video Grid */
+@media (max-width: 768px) {
+    .video-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
     
-    if (localVideo && remoteStream) {
-        localVideo.srcObject = remoteStream;
-        localVideo.style.display = "block";
-        if (placeholder) placeholder.style.display = "none";
-        
-        console.log('Remote video displayed');
-        updateConnectionStatus("Call Active");
+    #localVideo, #remoteVideo {
+        height: 200px;
+    }
+    
+    .video-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .video-controls button {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    .call-dialog-content {
+        width: 95%;
+        margin: 1rem;
+    }
+    
+    .call-dialog-actions {
+        flex-direction: column;
+    }
+    
+    .call-dialog-actions button {
+        width: 100%;
     }
 }
 
-// Update connection status
-function updateConnectionStatus(status) {
-    const statusEl = document.getElementById("connectionStatus");
-    if (statusEl) {
-        statusEl.innerHTML = `<i class="fas fa-wifi"></i> ${status}`;
+/* Dark Mode Adjustments */
+.dark-mode .call-dialog-content {
+    background: var(--bg-white);
+    color: var(--text-dark);
+}
+
+.dark-mode .doctor-item:hover,
+.dark-mode .patient-item:hover {
+    background-color: var(--bg-light);
+}
+
+.dark-mode #onlineDoctorsContainer,
+.dark-mode #waitingPatientsContainer {
+    background: var(--bg-white);
+}
+
+/* Additional CSS for Video Call Features */
+
+/* Incoming Call Dialog */
+.incoming-call-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+}
+
+.call-dialog-content {
+    background: white;
+    border-radius: 1rem;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+    animation: slideIn 0.3s ease;
+}
+
+.call-dialog-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.call-dialog-header i {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.call-dialog-body p {
+    text-align: center;
+    margin-bottom: 2rem;
+    font-size: 1.1rem;
+}
+
+.call-dialog-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Doctor/Patient Items */
+.doctor-item, .patient-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: white;
+}
+
+.doctor-info, .patient-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.doctor-info i.fas.fa-circle {
+    font-size: 0.8rem;
+}
+
+.doctor-info i.online {
+    color: var(--secondary-color);
+}
+
+.doctor-info i.busy {
+    color: var(--accent-color);
+}
+
+.doctor-status {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    text-transform: capitalize;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* Video Container Improvements */
+.video-container {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow-lg);
+    padding: 2rem;
+    text-align: center;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin: 2rem 0;
+}
+
+.video-placeholder {
+    background: var(--bg-light);
+    border-radius: 1rem;
+    padding: 4rem 2rem;
+    border: 2px dashed var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    min-height: 300px;
+    justify-content: center;
+}
+
+.video-placeholder i {
+    font-size: 4rem;
+    color: var(--text-light);
+}
+
+.video-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin: 2rem 0;
+    flex-wrap: wrap;
+}
+
+/* Connection Status */
+#connectionStatus {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* Waiting Patients/Online Doctors Containers */
+#waitingPatientsContainer,
+#onlineDoctorsContainer {
+    background: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+}
+
+#waitingPatientsContainer h4,
+#onlineDoctorsContainer h4 {
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-light);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Animation for slide in */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
-// Start WebRTC connection
-async function startWebRTCCall(isInitiator) {
-    console.log('Starting WebRTC call, initiator:', isInitiator);
+/* Video call status indicators */
+.call-status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+}
+
+.call-status.requesting {
+    background: var(--accent-color);
+    color: white;
+}
+
+.call-status.active {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.call-status.ended {
+    background: var(--text-light);
+    color: white;
+}
+
+/* Responsive improvements for video call */
+@media (max-width: 768px) {
+    .video-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
     
-    try {
-        peerConnection = new RTCPeerConnection(rtcConfig);
-        
-        // Add local stream to peer connection
-        if (localStream) {
-            localStream.getTracks().forEach(track => {
-                console.log('Adding track to peer connection');
-                peerConnection.addTrack(track, localStream);
-            });
-        }
-        
-        // Handle remote stream
-        peerConnection.ontrack = (event) => {
-            console.log("Received remote stream");
-            remoteStream = event.streams[0];
-            displayRemoteVideo();
-        };
-        
-        // Handle ICE candidates
-        peerConnection.onicecandidate = (event) => {
-            if (event.candidate && socket && currentRoomId) {
-                console.log("Sending ICE candidate");
-                socket.emit('webrtc-ice-candidate', {
-                    roomId: currentRoomId,
-                    candidate: event.candidate
-                });
-            }
-        };
-        
-        // Handle connection state changes
-        peerConnection.onconnectionstatechange = () => {
-            console.log("Connection state:", peerConnection.connectionState);
-            updateConnectionStatus(peerConnection.connectionState);
-        };
-        
-        if (isInitiator) {
-            // Create offer
-            console.log('Creating offer...');
-            const offer = await peerConnection.createOffer({
-                offerToReceiveAudio: true,
-                offerToReceiveVideo: true
-            });
-            await peerConnection.setLocalDescription(offer);
-            
-            console.log("Sending offer");
-            socket.emit('webrtc-offer', {
-                roomId: currentRoomId,
-                offer: offer
-            });
-        }
-        
-        isCallActive = true;
-        
-    } catch (error) {
-        console.error("Error starting WebRTC call:", error);
-        showNotification("Failed to start video call", "error");
-        resetVideoCallUI();
+    .call-dialog-content {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+    
+    .call-dialog-actions {
+        flex-direction: column;
+    }
+    
+    .call-dialog-actions .btn {
+        width: 100%;
+    }
+    
+    .video-controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .video-controls .btn {
+        width: 200px;
+    }
+    
+    .doctor-item,
+    .patient-item {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
     }
 }
 
-// Handle WebRTC offer
-async function handleWebRTCOffer(offer) {
-    try {
-        if (!peerConnection) {
-            await startWebRTCCall(false);
-        }
-        
-        console.log("Received offer, setting remote description");
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-        
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        console.log("Sending answer");
-        socket.emit('webrtc-answer', {
-            roomId: currentRoomId,
-            answer: answer
-        });
-        
-    } catch (error) {
-        console.error("Error handling WebRTC offer:", error);
-        showNotification("Failed to handle call offer", "error");
+/* Loading animation for waiting states */
+.loading-dots {
+    display: inline-block;
+}
+
+.loading-dots::after {
+    content: '';
+    animation: dots 1.5s steps(5, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}
+
+/* Pulse animation for incoming calls */
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
     }
 }
 
-// Handle WebRTC answer
-async function handleWebRTCAnswer(answer) {
-    try {
-        if (peerConnection) {
-            console.log("Received answer, setting remote description");
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-    } catch (error) {
-        console.error("Error handling WebRTC answer:", error);
-        showNotification("Failed to handle call answer", "error");
+/* Video quality indicators */
+.quality-indicator {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+}
+
+.quality-good {
+    color: var(--secondary-color);
+}
+
+.quality-medium {
+    color: var(--accent-color);
+}
+
+.quality-poor {
+    color: var(--danger-color);
+}
+
+/* Call duration timer */
+.call-duration {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--primary-color);
+    background: var(--bg-light);
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+}
+
+/* Mute/Camera off indicators */
+.media-indicator {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    display: none;
+}
+
+.media-indicator.show {
+    display: block;
+}
+
+/* Ai chat Integration*/
+
+/* =================================
+   AI HEALTH MATE - ADDITIONAL CSS
+   Add this to the END of your existing style.css file
+   ================================= */
+
+/* AI Chat Enhanced Styles */
+.chat-status {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+
+.chat-status.active {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.chat-status.processing {
+    background: var(--accent-color);
+    color: white;
+}
+
+.chat-status.ready {
+    background: var(--bg-light);
+    color: var(--text-dark);
+    border: 1px solid var(--border-color);
+}
+
+/* Typing Indicator */
+.typing-indicator {
+    opacity: 0.7;
+}
+
+.typing-dots::after {
+    content: '';
+    animation: typing 1.5s infinite;
+}
+
+@keyframes typing {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}
+
+/* Enhanced Chat Messages */
+.message-time {
+    font-size: 0.7rem;
+    color: var(--text-light);
+    margin-top: 0.5rem;
+    text-align: right;
+}
+
+.message.ai .message-time {
+    text-align: left;
+}
+
+/* Prescription Cards in Chat */
+.prescription-approved {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid var(--secondary-color);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.1);
+}
+
+.prescription-approved h4 {
+    color: var(--secondary-color);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.prescription-content {
+    background: white;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.prescription-content h5 {
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+/* Modal Styles for Prescription Editing */
+.prescription-edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: white;
+    border-radius: 1rem;
+    max-width: 800px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
     }
 }
 
-// Handle ICE candidate
-async function handleICECandidate(candidate) {
-    try {
-        if (peerConnection && peerConnection.remoteDescription) {
-            console.log("Adding ICE candidate");
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-    } catch (error) {
-        console.error("Error handling ICE candidate:", error);
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-light);
+    border-radius: 1rem 1rem 0 0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    background: var(--bg-light);
+    border-radius: 0 0 1rem 1rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-light);
+    transition: color 0.2s ease;
+    padding: 0.25rem;
+    border-radius: 50%;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn:hover {
+    color: var(--danger-color);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Enhanced Prescription Cards */
+.prescription-card {
+    background: white;
+    border-radius: 1rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+}
+
+.prescription-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.prescription-card[data-prescription-id] {
+    border-left: 4px solid var(--primary-color);
+}
+
+.prescription-header {
+    background: linear-gradient(135deg, var(--bg-light) 0%, #f8fafc 100%);
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+
+.prescription-header h4 {
+    margin: 0 0 0.5rem 0;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.prescription-header small {
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.prescription-content {
+    padding: 1.5rem;
+}
+
+.prescription-content h5 {
+    color: var(--primary-color);
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+}
+
+.consultation-summary {
+    background: var(--bg-light);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    border-left: 3px solid var(--accent-color);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.treatment-content {
+    background: #f8f9ff;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    border-left: 3px solid var(--primary-color);
+    line-height: 1.6;
+}
+
+/* Prescription Actions */
+.prescription-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.prescription-actions .btn {
+    min-width: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+/* Status Indicators */
+.approval-status {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.8rem;
+    font-weight: bold;
+    animation: fadeIn 0.3s ease;
+}
+
+.approval-status.approved {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.approval-status.rejected {
+    background: var(--danger-color);
+    color: white;
+}
+
+.approval-status.pending {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* Enhanced Dashboard Cards */
+.dashboard-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.dashboard-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.dashboard-card:hover::before {
+    opacity: 1;
+}
+
+/* AI Feature Highlights */
+.ai-feature-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin: 1rem 0;
+}
+
+.ai-feature-card h4 {
+    color: white;
+    margin-bottom: 0.5rem;
+}
+
+.ai-feature-card .btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+}
+
+.ai-feature-card .btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+/* Activity Items Enhancement */
+.activity-item {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s ease;
+}
+
+.activity-item:hover {
+    background-color: var(--bg-light);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-item strong {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-dark);
+}
+
+.activity-item i {
+    color: var(--primary-color);
+}
+
+/* Connection Status Indicators */
+.connection-online {
+    color: var(--secondary-color);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.connection-offline {
+    color: var(--danger-color);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Enhanced Input States */
+.input-group input:disabled {
+    background: var(--bg-light);
+    color: var(--text-light);
+    cursor: not-allowed;
+}
+
+.input-group button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.input-group button:disabled:hover {
+    transform: none;
+}
+
+/* Notification Enhancements */
+.notification.info {
+    background: var(--primary-color);
+    color: white;
+}
+
+.notification.success {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.notification.warning {
+    background: var(--accent-color);
+    color: white;
+}
+
+.notification.error {
+    background: var(--danger-color);
+    color: white;
+}
+
+/* Loading States */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.loading-spinner-large {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--border-color);
+    border-top: 4px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Responsive Enhancements */
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        margin: 1rem;
+        max-height: 95vh;
+    }
+    
+    .modal-footer {
+        flex-direction: column;
+    }
+    
+    .modal-footer .btn {
+        width: 100%;
+    }
+    
+    .prescription-actions {
+        flex-direction: column;
+    }
+    
+    .prescription-actions .btn {
+        width: 100%;
+    }
+    
+    .chat-header {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+    
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats {
+        flex-direction: column;
+        gap: 1rem;
     }
 }
 
-// End video call
-function endVideoCall() {
-    console.log('Ending video call...');
-    
-    // Stop local stream
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            track.stop();
-        });
-        localStream = null;
-    }
-    
-    // Close peer connection
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    
-    // Reset remote stream
-    remoteStream = null;
-    
-    // Notify server if call is active
-    if (isCallActive && socket && currentRoomId) {
-        socket.emit('end-call', { roomId: currentRoomId });
-    }
-    
-    isCallActive = false;
-    currentRoomId = null;
-    
-    resetVideoCallUI();
-    updateConnectionStatus("Disconnected");
+/* Dark Mode Enhancements */
+.dark-mode .modal-content {
+    background: var(--bg-white);
+    color: var(--text-dark);
 }
 
-// Update video call UI based on state
-function updateVideoCallUI(state) {
-    const startBtn = document.getElementById("startCallBtn");
-    const endBtn = document.getElementById("endCallBtn");
-    const muteBtn = document.getElementById("muteBtn");
-    const cameraBtn = document.getElementById("cameraBtn");
+.dark-mode .modal-header,
+.dark-mode .modal-footer {
+    background: var(--bg-light);
+    border-color: var(--border-color);
+}
+
+.dark-mode .prescription-approved {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border-color: var(--secondary-color);
+}
+
+.dark-mode .prescription-content {
+    background: var(--bg-light);
+}
+
+.dark-mode .consultation-summary,
+.dark-mode .treatment-content {
+    background: var(--bg-light);
+    color: var(--text-dark);
+}
+
+/* Accessibility Improvements */
+.btn:focus,
+.close-btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.prescription-card:focus-within {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+    .prescription-card {
+        border: 2px solid var(--text-dark);
+    }
     
-    console.log('Updating UI state:', state);
+    .btn {
+        border-width: 2px;
+    }
     
-    switch(state) {
-        case 'requesting':
-            if (startBtn) startBtn.style.display = "none";
-            if (endBtn) {
-                endBtn.style.display = "inline-block";
-                endBtn.innerHTML = '<i class="fas fa-times"></i> Cancel Request';
-            }
-            if (muteBtn) muteBtn.style.display = "inline-block";
-            if (cameraBtn) cameraBtn.style.display = "inline-block";
-            break;
-            
-        case 'call-accepted':
-        case 'call-started':
-            if (startBtn) startBtn.style.display = "none";
-            if (endBtn) {
-                endBtn.style.display = "inline-block";
-                endBtn.innerHTML = '<i class="fas fa-phone-slash"></i> End Call';
-            }
-            if (muteBtn) muteBtn.style.display = "inline-block";
-            if (cameraBtn) cameraBtn.style.display = "inline-block";
-            break;
+    .notification {
+        border: 2px solid currentColor;
     }
 }
 
-// Reset video call UI
-function resetVideoCallUI() {
-    const startBtn = document.getElementById("startCallBtn");
-    const endBtn = document.getElementById("endCallBtn");
-    const muteBtn = document.getElementById("muteBtn");
-    const cameraBtn = document.getElementById("cameraBtn");
-    const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
-    const localPlaceholder = document.getElementById("localVideoPlaceholder");
-    const remotePlaceholder = document.getElementById("remoteVideoPlaceholder");
-    
-    if (startBtn) startBtn.style.display = "inline-block";
-    if (endBtn) endBtn.style.display = "none";
-    if (muteBtn) muteBtn.style.display = "none";
-    if (cameraBtn) cameraBtn.style.display = "none";
-    
-    if (localVideo) {
-        localVideo.style.display = "none";
-        localVideo.srcObject = null;
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+    .typing-dots::after {
+        animation: none;
+        content: '...';
     }
-    if (remoteVideo) {
-        remoteVideo.style.display = "none";
-        remoteVideo.srcObject = null;
+    
+    .loading-spinner,
+    .loading-spinner-large {
+        animation: none;
     }
-    if (localPlaceholder) localPlaceholder.style.display = "block";
-    if (remotePlaceholder) remotePlaceholder.style.display = "block";
-}
-
-// Toggle mute/unmute
-function toggleMute() {
-    if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        if (audioTrack) {
-            audioTrack.enabled = !audioTrack.enabled;
-            const muteBtn = document.getElementById("muteBtn");
-            if (muteBtn) {
-                muteBtn.innerHTML = audioTrack.enabled ? 
-                    '<i class="fas fa-microphone"></i> Mute' : 
-                    '<i class="fas fa-microphone-slash"></i> Unmute';
-            }
-            showNotification(audioTrack.enabled ? "Microphone unmuted" : "Microphone muted", "info");
-        }
+    
+    .modal-content {
+        animation: none;
+    }
+    
+    * {
+        transition-duration: 0.01ms !important;
     }
 }
 
-// Toggle camera on/off
-function toggleCamera() {
-    if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-            videoTrack.enabled = !videoTrack.enabled;
-            const cameraBtn = document.getElementById("cameraBtn");
-            if (cameraBtn) {
-                cameraBtn.innerHTML = videoTrack.enabled ? 
-                    '<i class="fas fa-video"></i> Camera' : 
-                    '<i class="fas fa-video-slash"></i> Camera';
-            }
-            showNotification(videoTrack.enabled ? "Camera turned on" : "Camera turned off", "info");
-        }
+/* Print Styles */
+@media print {
+    .prescription-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    .prescription-actions {
+        display: none;
+    }
+    
+    .modal-content {
+        box-shadow: none;
     }
 }
 
-// Show incoming call dialog for doctors
-function showIncomingCallDialog(patientId, patientName, requestId) {
-    console.log('Showing incoming call dialog:', { patientId, patientName, requestId });
-    
-    // Remove existing dialog if any
-    const existingDialog = document.getElementById('incomingCallDialog');
-    if (existingDialog) {
-        existingDialog.remove();
-    }
-    
-    const dialog = document.createElement('div');
-    dialog.id = 'incomingCallDialog';
-    dialog.className = 'incoming-call-dialog';
-    dialog.innerHTML = `
-        <div class="call-dialog-content">
-            <div class="call-dialog-header">
-                <i class="fas fa-video pulse"></i>
-                <h3>Incoming Video Call</h3>
-            </div>
-            <div class="call-dialog-body">
-                <p><strong>${patientName}</strong> is requesting a video consultation</p>
-                <div class="call-dialog-actions">
-                    <button onclick="acceptCall('${patientId}', '${patientName}')" class="btn btn-secondary">
-                        <i class="fas fa-video"></i> Accept
-                    </button>
-                    <button onclick="rejectCall('${patientId}')" class="btn btn-danger">
-                        <i class="fas fa-phone-slash"></i> Reject
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(dialog);
-    
-    // Auto-reject after 30 seconds
-    setTimeout(() => {
-        const stillExists = document.getElementById('incomingCallDialog');
-        if (stillExists) {
-            console.log('Auto-rejecting call after timeout');
-            rejectCall(patientId);
-        }
-    }, 30000);
+/* Additional Utility Classes */
+.text-ai {
+    color: var(--primary-color);
 }
 
-// Remove call request dialog
-function removeCallRequest(patientId) {
-    const dialog = document.getElementById('incomingCallDialog');
-    if (dialog) {
-        dialog.remove();
-        console.log('Call request dialog removed');
+.bg-ai {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+}
+
+.border-ai {
+    border: 2px solid var(--primary-color);
+}
+
+.shadow-ai {
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
+}
+
+/* Animation Classes */
+.fade-in {
+    animation: fadeIn 0.3s ease;
+}
+
+.slide-up {
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
-// Doctor accepts call
-async function acceptCall(patientId, patientName) {
-    console.log('Doctor accepting call from:', patientName);
-    
-    try {
-        // Get user media
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                frameRate: { ideal: 30 }
-            }, 
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            }
-        });
-        
-        displayLocalVideo();
-        
-        console.log('Emitting accept-call...');
-        socket.emit('accept-call', {
-            patientId: patientId,
-            doctorId: currentUser._id,
-            doctorName: currentUser.name
-        });
-        
-        // Remove dialog
-        removeCallRequest(patientId);
-        
-        showNotification(`Accepted call from ${patientName}`, 'success');
-        updateVideoCallUI('call-started');
-        
-    } catch (err) {
-        console.error("Error accepting call:", err);
-        let errorMessage = "Could not access camera/microphone";
-        
-        if (err.name === 'NotAllowedError') {
-            errorMessage = "Camera/microphone access denied. Please allow permissions and try again.";
-        }
-        
-        showNotification(errorMessage, "error");
-        removeCallRequest(patientId);
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
     }
 }
 
-// Doctor rejects call
-function rejectCall(patientId) {
-    console.log('Doctor rejecting call from patient:', patientId);
-    
-    if (socket) {
-        socket.emit('reject-call', {
-            patientId: patientId,
-            doctorId: currentUser._id
-        });
-    }
-    
-    removeCallRequest(patientId);
-    showNotification("Call request rejected", "info");
+/* Special AI Chat Enhancements */
+.chat-container {
+    position: relative;
 }
 
-// Update online doctors UI for patients
-function updateOnlineDoctorsUI(doctors) {
-    const container = document.getElementById('onlineDoctorsContainer');
-    if (!container) return;
-    
-    console.log('Updating online doctors UI:', doctors);
-    
-    container.innerHTML = `
-        <h4><i class="fas fa-user-md"></i> Available Doctors (${doctors.length})</h4>
-        ${doctors.length === 0 ? 
-            '<p style="color: var(--text-light); margin: 1rem 0;">No doctors currently online.</p>' :
-            doctors.map(doctor => `
-                <div class="doctor-item">
-                    <div class="doctor-info">
-                        <i class="fas fa-circle ${doctor.status === 'online' ? 'online' : 'busy'}"></i>
-                        Dr. ${doctor.name} (${doctor.specialty || 'General'})
-                    </div>
-                    <span class="doctor-status">${doctor.status}</span>
-                </div>
-            `).join('')
-        }
-    `;
+.chat-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -10px;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--primary-color), var(--secondary-color));
+    border-radius: 2px;
+    opacity: 0.3;
 }
 
-// Update waiting patients UI for doctors
-function updateWaitingPatientsUI(patients) {
-    const container = document.getElementById('waitingPatientsContainer');
-    if (!container) return;
-    
-    console.log('Updating waiting patients UI:', patients);
-    
-    container.innerHTML = `
-        <h4><i class="fas fa-clock"></i> Waiting Patients (${patients.length})</h4>
-        ${patients.length === 0 ? 
-            '<p style="color: var(--text-light); margin: 1rem 0;">No patients currently waiting for consultation.</p>' :
-            patients.map(patient => `
-                <div class="patient-item">
-                    <div class="patient-info">
-                        <i class="fas fa-user"></i>
-                        ${patient.name}
-                    </div>
-                    <button onclick="acceptCall('${patient.id}', '${patient.name}')" class="btn btn-sm btn-primary">
-                        Accept Call
-                    </button>
-                </div>
-            `).join('')
-        }
-    `;
+.message.ai .message-content {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-left: 3px solid var(--primary-color);
 }
 
-// ------------------ AI Chat Functions ------------------
-function startAIChat() {
-    if (!socket || !socket.connected) {
-        showNotification('Please wait for connection to establish', 'error');
-        enableChatInput(); // Enable input as fallback
-        return;
-    }
-
-    if (!currentUser) {
-        showNotification('Please log in to start AI consultation', 'error');
-        enableChatInput(); // Enable input as fallback
-        return;
-    }
-
-    console.log('🤖 Starting AI chat session...');
-    
-    // Clear previous chat
-    clearChatMessages();
-    chatHistory = [];
-    
-    // Send start chat request
-    socket.emit('start-ai-chat', {
-        patientId: currentUser._id,
-        patientName: currentUser.name
-    });
-    
-    showNotification('Initializing AI consultation...', 'info');
-    disableChatInput();
-    
-    // Fallback: Enable input if chat doesn't start within 5 seconds
-    setTimeout(() => {
-        if (!isAIChatActive) {
-            console.warn('AI chat session failed to start, enabling input');
-            showNotification('Failed to start AI chat. You can still type symptoms.', 'warning');
-            enableChatInput();
-        }
-    }, 5000);
+.message.user .message-content {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
 }
 
-function sendSymptomMessage() {
-    const input = document.getElementById("symptomInput");
-    if (!input) {
-        console.warn('symptomInput element not found');
-        return;
-    }
-    
-    const message = input.value.trim();
-    if (!message) return;
-
-    if (!currentChatSession && !isAIChatActive) {
-        // Start AI chat session first
-        startAIChat();
-        
-        // Wait a moment for session to initialize, then send message
-        setTimeout(() => {
-            if (currentChatSession) {
-                sendAIMessage(message);
-                input.value = '';
-            }
-        }, 1000);
-        return;
-    }
-    
-    sendAIMessage(message);
-    input.value = '';
-}
-
-function sendAIMessage(message) {
-    if (!socket || !socket.connected) {
-        showNotification('Connection lost. Please refresh the page.', 'error');
-        enableChatInput(); // Enable input as fallback
-        return;
-    }
-
-    if (!currentChatSession) {
-        showNotification('No active chat session. Please start a new consultation.', 'error');
-        enableChatInput(); // Enable input as fallback
-        return;
-    }
-
-    console.log(`💬 Sending AI message: ${message}`);
-    
-    // Add user message to chat immediately
-    addChatMessage('user', message);
-    
-    // Add to history
-    chatHistory.push({ sender: 'user', content: message, timestamp: Date.now() });
-    
-    // Disable input while processing
-    disableChatInput();
-    
-    // Show typing indicator
-    showTypingIndicator();
-    
-    // Send to server
-    socket.emit('ai-chat-message', {
-        sessionId: currentChatSession,
-        message: message,
-        patientId: currentUser._id
-    });
-}
-
-function handleChatKeyPress(event) {
-    console.log('Key pressed on symptomInput:', event.key);
-    if (event.key === 'Enter') {
-        sendSymptomMessage();
-    }
-}
-
-function addChatMessage(sender, content, timestamp = null) {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${sender}`;
-    
-    const messageContent = document.createElement('div');
-    messageContent.className = 'message-content';
-    
-    // Handle HTML content for prescriptions
-    if (content.includes('<div class="prescription-approved">')) {
-        messageContent.innerHTML = content;
-    } else {
-        messageContent.innerHTML = `<p>${content}</p>`;
-    }
-    
-    if (timestamp) {
-        const timeDiv = document.createElement('div');
-        timeDiv.className = 'message-time';
-        timeDiv.textContent = new Date(timestamp).toLocaleTimeString();
-        messageContent.appendChild(timeDiv);
-    }
-    
-    messageDiv.appendChild(messageContent);
-    chatMessages.appendChild(messageDiv);
-    
-    // Scroll to bottom
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    
-    // Remove typing indicator if exists
-    hideTypingIndicator();
-}
-
-function clearChatMessages() {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-    
-    // Keep the initial AI greeting
-    chatMessages.innerHTML = `
-        <div class="message ai">
-            <div class="message-content">
-                <p>Hello! I'm your AI Health Assistant. Please describe your symptoms, and I'll provide a preliminary analysis. Remember, this is not a substitute for professional medical advice.</p>
-            </div>
-        </div>
-    `;
-}
-
-function showTypingIndicator() {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-
-    // Remove existing typing indicator
-    hideTypingIndicator();
-    
-    const typingDiv = document.createElement('div');
-    typingDiv.className = 'message ai typing-indicator';
-    typingDiv.innerHTML = `
-        <div class="message-content">
-            <p>AI Assistant is typing<span class="typing-dots">...</span></p>
-        </div>
-    `;
-    
-    chatMessages.appendChild(typingDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function hideTypingIndicator() {
-    const typingIndicator = document.querySelector('.typing-indicator');
-    if (typingIndicator) {
-        typingIndicator.remove();
-    }
-}
-
-function disableChatInput() {
-    const input = document.getElementById('symptomInput');
-    const button = input?.nextElementSibling;
-    
-    if (input) {
-        input.disabled = true;
-        input.placeholder = 'AI is processing your message...';
-        console.log('Chat input disabled');
-    }
-    
-    if (button) {
-        button.disabled = true;
-    }
-}
-
-function enableChatInput() {
-    const input = document.getElementById('symptomInput');
-    const button = input?.nextElementSibling;
-    
-    if (input) {
-        input.disabled = false;
-        input.placeholder = 'Describe your symptoms...';
-        input.focus();
-        console.log('Chat input enabled');
-    }
-    
-    if (button) {
-        button.disabled = false;
-    }
-}
-
-// ------------------ Prescription Management Functions ------------------
-function addPrescriptionToApprovalList(prescriptionData) {
-    // This function adds prescription to doctor's approval list
-    // Implementation depends on your UI structure
-    console.log('Adding prescription to approval list:', prescriptionData);
-    
-    // You can implement UI update here
-    const prescriptionsContainer = document.getElementById('pendingPrescriptionsContainer');
-    if (prescriptionsContainer) {
-        // Add prescription card to the container
-        const prescriptionCard = createPrescriptionCard(prescriptionData);
-        prescriptionsContainer.appendChild(prescriptionCard);
-    }
-}
-
-function createPrescriptionCard(prescriptionData) {
-    const card = document.createElement('div');
-    card.className = 'prescription-card';
-    card.setAttribute('data-prescription-id', prescriptionData.id);
-    
-    card.innerHTML = `
-        <div class="prescription-header">
-            <h4>Patient: ${prescriptionData.patientName}</h4>
-            <small>AI Generated Prescription | ${new Date(prescriptionData.createdAt).toLocaleString()}</small>
-        </div>
-        <div class="prescription-content">
-            <h5>AI Consultation Summary:</h5>
-            <div class="consultation-summary">
-                ${prescriptionData.conversationSummary?.replace(/\n/g, '<br>') || 'No summary available'}
-            </div>
-            <h5>Suggested Treatment:</h5>
-            <div class="treatment-content">
-                ${prescriptionData.content.replace(/\n/g, '<br>')}
-            </div>
-            <div class="prescription-actions">
-                <button onclick="approvePrescription('${prescriptionData.id}')" class="btn btn-secondary">
-                    <i class="fas fa-check"></i> Approve
-                </button>
-                <button onclick="rejectPrescription('${prescriptionData.id}')" class="btn btn-danger">
-                    <i class="fas fa-times"></i> Reject
-                </button>
-                <button onclick="modifyPrescription('${prescriptionData.id}')" class="btn btn-outline">
-                    <i class="fas fa-edit"></i> Modify
-                </button>
-            </div>
-        </div>
-    `;
-    
-    return card;
-}
-
-function displayPendingPrescriptions(prescriptions) {
-    console.log('Displaying pending prescriptions:', prescriptions);
-    
-    // Update the pending prescriptions section in doctor dashboard
-    const container = document.querySelector('#doctor-dashboard .prescription-card');
-    if (container && prescriptions.length > 0) {
-        // Clear existing static prescriptions and add real ones
-        const parentContainer = container.parentElement;
-        parentContainer.innerHTML = '<h3><i class="fas fa-clipboard-check"></i> Pending Prescription Approvals</h3>';
-        
-        prescriptions.forEach(prescription => {
-            const card = createPrescriptionCard(prescription);
-            parentContainer.appendChild(card);
-        });
-    }
-}
-
-function approvePrescription(id) {
-    showNotification(`Prescription ${id} approved`, "success");
-}
-
-function rejectPrescription(id) {
-    showNotification(`Prescription ${id} rejected`, "error");
-}
-
-function modifyPrescription(id) {
-    showNotification(`Editing prescription ${id}`, "info");
-}
-
-function downloadPrescription(id) {
-    showNotification(`Prescription ${id} downloaded`, "success");
-}
-
-// ------------------ Dashboard Functions ------------------
-function viewPrescriptions() {
-    const prescriptionsView = document.getElementById("prescriptionsView");
-    if (prescriptionsView) {
-        prescriptionsView.style.display = prescriptionsView.style.display === "none" ? "block" : "none";
-    }
-    showNotification("Prescriptions loaded", "success");
-}
-
-function toggleDoctorStatus() {
-    showNotification("Status updated", "success");
-}
-
-// ------------------ Helper functions ------------------
-function showPatientSignup() {
-    showSection("patient-signup");
-}
-
-function showDoctorSignup() {
-    showSection("doctor-signup");
-}
-
-// ------------------ Dark Mode ------------------
-function toggleDarkMode() {
-    document.body.classList.toggle("dark-mode");
-    const isDark = document.body.classList.contains("dark-mode");
-    const darkModeBtn = document.getElementById("darkModeBtn");
-    if (darkModeBtn) {
-        darkModeBtn.innerHTML = isDark ? 
-            '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
-    }
-}
-
-// ------------------ Additional Utility Functions ------------------
-
-// Check if user is logged in
-function isLoggedIn() {
-    return userSession.user !== null && userSession.token !== null;
-}
-
-// Get current user info
-function getCurrentUser() {
-    return userSession.user;
-}
-
-// Check connection status
-function checkConnectionStatus() {
-    if (!socket) {
-        return 'disconnected';
-    }
-    return socket.connected ? 'connected' : 'disconnected';
-}
-
-// Reconnect socket if disconnected
-function reconnectSocket() {
-    if (socket && !socket.connected && isLoggedIn()) {
-        console.log('Attempting to reconnect...');
-        socket.connect();
-    }
-}
-
-// Handle page refresh - maintain session if possible
-window.addEventListener('beforeunload', function(e) {
-    if (isCallActive) {
-        e.preventDefault();
-        e.returnValue = 'You are currently in a video call. Are you sure you want to leave?';
-        return e.returnValue;
-    }
-});
-
-// Handle page visibility change - pause/resume video when tab is hidden/shown
-document.addEventListener('visibilitychange', function() {
-    if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (videoTrack) {
-            if (document.hidden) {
-                console.log('Page hidden, pausing video');
-            } else {
-                console.log('Page visible, resuming video');
-            }
-        }
-    }
-});
-
-// Network connection monitoring
-window.addEventListener('online', function() {
-    console.log('Network connection restored');
-    showNotification('Connection restored', 'success');
-    reconnectSocket();
-});
-
-window.addEventListener('offline', function() {
-    console.log('Network connection lost');
-    showNotification('Connection lost. Please check your internet.', 'error');
-});
-
-// Error handler for unhandled promise rejections
-window.addEventListener('unhandledrejection', function(event) {
-    console.error('Unhandled promise rejection:', event.reason);
-    // Don't show notification for every unhandled rejection to avoid spam
-    // showNotification('An unexpected error occurred', 'error');
-});
-
-// Global error handler
-window.addEventListener('error', function(event) {
-    console.error('Global error:', event.error);
-    // Log error but don't show notification unless it's critical
-});
-
-// Cleanup function when page unloads
-window.addEventListener('unload', function() {
-    if (socket) {
-        socket.disconnect();
-    }
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-    }
-    if (peerConnection) {
-        peerConnection.close();
-    }
-});
-
-// Initialize notification system
-function initializeNotifications() {
-    // Request notification permission for browser notifications
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
-}
-
-// Show browser notification for incoming calls (when tab is not active)
-function showBrowserNotification(title, body, onclick) {
-    if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-        const notification = new Notification(title, {
-            body: body,
-            icon: '/favicon.ico', // Add your app icon
-            badge: '/favicon.ico',
-            tag: 'video-call',
-            requireInteraction: true
-        });
-        
-        notification.onclick = function() {
-            window.focus();
-            if (onclick) onclick();
-            notification.close();
-        };
-        
-        // Auto close after 10 seconds
-        setTimeout(() => notification.close(), 10000);
-    }
-}
-
-// Enhanced incoming call dialog with sound notification
-function showIncomingCallDialogEnhanced(patientId, patientName, requestId) {
-    console.log('Showing enhanced incoming call dialog:', { patientId, patientName, requestId });
-    
-    // Play notification sound if available
-    try {
-        // Create audio element for call notification sound
-        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmkaATiF0fPQgjIGIXPI8dyJOQgSUM/t559NEAxJsuPxtmMcBBmDwO3MeSUFJHfH8N2QQAoUYrTp66hVFAwZfeDx');
-        audio.play().catch(e => console.log('Could not play notification sound'));
-    } catch (e) {
-        console.log('Audio notification not supported');
-    }
-    
-    // Show browser notification if tab is not active
-    showBrowserNotification(
-        'Incoming Video Call',
-        `${patientName} is requesting a video consultation`,
-        () => {
-            // Focus on the call dialog when notification is clicked
-            const dialog = document.getElementById('incomingCallDialog');
-            if (dialog) {
-                dialog.scrollIntoView({ behavior: 'smooth' });
-            }
-        }
-    );
-    
-    // Show the regular dialog
-    showIncomingCallDialog(patientId, patientName, requestId);
-}
-
-// Session management
-function checkUserSession() {
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-        try {
-            currentUser = JSON.parse(savedUser);
-            userSession.user = currentUser;
-            userSession.userType = currentUser.userType;
-            console.log('💾 Restored user session:', currentUser.name);
-            
-            if (currentUser.userType === 'patient') {
-                document.getElementById('patientName').textContent = currentUser.name;
-                showSection('patient-dashboard');
-            } else if (currentUser.userType === 'doctor') {
-                document.getElementById('doctorName').textContent = currentUser.name;
-                showSection('doctor-dashboard');
-            }
-            
-            // Join socket when connected
-            if (socket && socket.connected) {
-                joinAsUser();
-            }
-            
-        } catch (error) {
-            console.error('Error restoring session:', error);
-            localStorage.removeItem('currentUser');
-        }
-    }
-}
-
-function joinAsUser() {
-    if (!socket || !currentUser) return;
-    
-    const userData = {
-        userId: currentUser._id,
-        userType: currentUser.userType,
-        userName: currentUser.name
-    };
-    
-    console.log('👤 Joining as user:', userData);
-    socket.emit('join-as-user', userData);
-}
-
-// Export functions for global access if needed
-window.showSection = showSection;
-window.showPatientSignup = showPatientSignup;
-window.showDoctorSignup = showDoctorSignup;
-window.logout = logout;
-window.startVideoCall = startVideoCall;
-window.endVideoCall = endVideoCall;
-window.toggleMute = toggleMute;
-window.toggleCamera = toggleCamera;
-window.toggleDarkMode = toggleDarkMode;
-window.viewPrescriptions = viewPrescriptions;
-window.downloadPrescription = downloadPrescription;
-window.approvePrescription = approvePrescription;
-window.rejectPrescription = rejectPrescription;
-window.modifyPrescription = modifyPrescription;
-window.toggleDoctorStatus = toggleDoctorStatus;
-window.sendSymptomMessage = sendSymptomMessage;
-window.handleChatKeyPress = handleChatKeyPress;
-window.acceptCall = acceptCall;
-window.rejectCall = rejectCall;
-
-console.log('🎉 Merged AI Health Mate script loaded with OpenAI integration and full video call support');
-
-
-
-
+/* End of AI Health Mate Additional CSS */
 
 
