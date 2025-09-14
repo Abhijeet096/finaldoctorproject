@@ -15,7 +15,7 @@ const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
     console.error("ERROR: MONGO_URI not found in environment variables");
-    console.error("Please create a .env file with MONGO_URI=your_mongodb_connection_string");
+    console.error("Please set MONGO_URI in your Render environment variables");
     process.exit(1);
 }
 
@@ -32,42 +32,45 @@ mongoose.connect(MONGO_URI, {
 const app = express();
 const server = http.createServer(app);
 
-// Enhanced CORS configuration for cross-device communication
+// Get the frontend URL from environment or default for development
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://abhijeet096.github.io';
+
+// Enhanced CORS configuration for production deployment
+const corsOptions = {
+    origin: [
+        FRONTEND_URL,
+        'https://abhijeet096.github.io',
+        'http://localhost:3000',
+        'http://localhost:5173',
+        /^https:\/\/.*\.render\.com$/,  // Allow any render.com subdomain
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Socket.IO configuration with proper CORS for production
 const io = socketIo(server, {
-    cors: {
-        origin: "*", // Allow all origins for development
-        methods: ["GET", "POST"],
-        allowedHeaders: ["*"],
-        credentials: true
-    },
+    cors: corsOptions,
     allowEIO3: true,
     transports: ['websocket', 'polling']
 });
 
 const PORT = process.env.PORT || 5000;
 
-
-// render url 
-const cors = require('cors');
-
-app.use(cors({
-  origin: [
-    'https://abhijeet096.github.io/finaldoctorproject/', // frontend on GitHub Pages
-  ],
-  methods: ['GET','POST','PUT','DELETE'],
-  credentials: true
-}));
-
-
-// Enhanced CORS middleware
-app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true
-}));
-
 app.use(bodyParser.json());
+
+// Add a basic route for health checks
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'AI Health Mate Server is running!', 
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
 
 // Store online users and call requests - using Maps for better cross-device tracking
 const onlineUsers = new Map(); // userId -> socket info
@@ -99,7 +102,7 @@ function logState() {
 
 // ---------------- Socket.IO Events ----------------
 io.on('connection', (socket) => {
-    console.log(`New connection: ${socket.id} from ${socket.handshake.address}`);
+    console.log(`New connection: ${socket.id}`);
 
     // User joins (patient or doctor)
     socket.on('join-as-user', (data) => {
@@ -176,8 +179,10 @@ io.on('connection', (socket) => {
         broadcastOnlineDoctors();
         broadcastWaitingPatients();
         
-        // Log current state
-        logState();
+        // Log current state in development
+        if (process.env.NODE_ENV !== 'production') {
+            logState();
+        }
         
         // Confirm join to the user
         socket.emit('join-confirmed', {
@@ -193,10 +198,8 @@ io.on('connection', (socket) => {
     socket.on('request-video-call', (data) => {
         const { patientId, patientName } = data;
         
-        console.log(`\n=== VIDEO CALL REQUEST ===`);
-        console.log(`From: ${patientName} (${patientId})`);
+        console.log(`VIDEO CALL REQUEST from: ${patientName} (${patientId})`);
         console.log(`Available doctors: ${onlineDoctors.size}`);
-        console.log('Doctors list:', Array.from(onlineDoctors.values()).map(d => d.name));
         
         if (onlineDoctors.size === 0) {
             console.log('No doctors online, rejecting call');
@@ -224,11 +227,9 @@ io.on('connection', (socket) => {
         let doctorsNotified = 0;
         let doctorsSkipped = 0;
         
-        console.log('\n--- Notifying Doctors ---');
         onlineDoctors.forEach((doctor, doctorId) => {
             const doctorSocket = io.sockets.sockets.get(doctor.socketId);
             if (doctorSocket && doctorSocket.connected) {
-                console.log(`Sending to Dr. ${doctor.name} (${doctor.socketId.substring(0, 8)}...)`);
                 doctorSocket.emit('incoming-call-request', {
                     patientId,
                     patientName,
@@ -243,7 +244,6 @@ io.on('connection', (socket) => {
         });
 
         console.log(`Notification Results: ${doctorsNotified} notified, ${doctorsSkipped} skipped`);
-        console.log('========================\n');
         
         if (doctorsNotified === 0) {
             console.log('No doctors could be notified');
@@ -280,9 +280,7 @@ io.on('connection', (socket) => {
     socket.on('accept-call', (data) => {
         const { patientId, doctorId, doctorName } = data;
         
-        console.log(`\n=== CALL ACCEPTANCE ===`);
-        console.log(`Doctor: ${doctorName} (${doctorId})`);
-        console.log(`Patient: ${patientId}`);
+        console.log(`CALL ACCEPTANCE - Doctor: ${doctorName}, Patient: ${patientId}`);
         
         // Find the call request
         let requestToAccept = null;
@@ -318,7 +316,6 @@ io.on('connection', (socket) => {
         const patientSocket = io.sockets.sockets.get(requestToAccept.patientSocketId);
         if (patientSocket && patientSocket.connected) {
             patientSocket.join(roomId);
-            console.log('Patient joined room');
             
             // Notify patient that call was accepted
             patientSocket.emit('call-accepted', {
@@ -326,7 +323,6 @@ io.on('connection', (socket) => {
                 doctorName,
                 doctorId
             });
-            console.log('Sent call-accepted to patient');
         } else {
             console.log('Patient socket not found or disconnected');
             socket.emit('call-failed', { message: 'Patient is no longer available' });
@@ -351,26 +347,22 @@ io.on('connection', (socket) => {
             patientId,
             patientName: requestToAccept.patientName
         });
-        console.log('Sent call-started to doctor');
 
         // Remove the request and notify other doctors
         activeCallRequests.delete(requestId);
         
         // Notify other doctors that this call was taken
-        console.log('Notifying other doctors that call was taken...');
         onlineDoctors.forEach((doctor, dId) => {
             if (dId !== doctorId) {
                 const doctorSocket = io.sockets.sockets.get(doctor.socketId);
                 if (doctorSocket && doctorSocket.connected) {
                     doctorSocket.emit('call-taken', { patientId });
-                    console.log(`Notified Dr. ${doctor.name} that call was taken`);
                 }
             }
         });
 
         broadcastWaitingPatients();
         console.log(`Call successfully established: Dr. ${doctorName} <-> ${requestToAccept.patientName}`);
-        console.log('=====================\n');
     });
 
     // Doctor rejects call
@@ -380,25 +372,23 @@ io.on('connection', (socket) => {
         // Individual rejection - call request remains for other doctors
     });
 
-    // WebRTC Signaling - Enhanced with logging
+    // WebRTC Signaling
     socket.on('webrtc-offer', (data) => {
         const { roomId, offer } = data;
-        console.log(`WebRTC offer received for room ${roomId} from ${socket.userId}`);
+        console.log(`WebRTC offer received for room ${roomId}`);
         socket.to(roomId).emit('webrtc-offer', {
             offer,
             from: socket.userId
         });
-        console.log(`WebRTC offer forwarded to room ${roomId}`);
     });
 
     socket.on('webrtc-answer', (data) => {
         const { roomId, answer } = data;
-        console.log(`WebRTC answer received for room ${roomId} from ${socket.userId}`);
+        console.log(`WebRTC answer received for room ${roomId}`);
         socket.to(roomId).emit('webrtc-answer', {
             answer,
             from: socket.userId
         });
-        console.log(`WebRTC answer forwarded to room ${roomId}`);
     });
 
     socket.on('webrtc-ice-candidate', (data) => {
@@ -415,32 +405,23 @@ io.on('connection', (socket) => {
         const call = activeCalls.get(roomId);
         
         if (call) {
-            console.log(`Call ended in room ${roomId} by ${socket.userName}`);
-            // Notify other participant
+            console.log(`Call ended in room ${roomId}`);
             socket.to(roomId).emit('call-ended');
-            
-            // Clean up
             activeCalls.delete(roomId);
         }
     });
 
     // Handle disconnect with enhanced cleanup
     socket.on('disconnect', (reason) => {
-        console.log(`\n=== USER DISCONNECT ===`);
-        console.log(`Socket: ${socket.id}`);
-        console.log(`Reason: ${reason}`);
+        console.log(`User disconnect: ${socket.id}, reason: ${reason}`);
         
         if (socket.userId) {
-            console.log(`User: ${socket.userName} (${socket.userType})`);
-            
             // Remove from online users
             onlineUsers.delete(socket.userId);
             
             if (socket.userType === 'doctor') {
                 const removed = onlineDoctors.delete(socket.userId);
                 console.log(`Doctor removed: ${removed}. Remaining doctors: ${onlineDoctors.size}`);
-                
-                // Immediately broadcast updated doctor list to all patients
                 broadcastOnlineDoctors();
                 
             } else if (socket.userType === 'patient') {
@@ -448,18 +429,13 @@ io.on('connection', (socket) => {
                 console.log(`Patient removed: ${removed}. Remaining patients: ${onlinePatients.size}`);
                 
                 // Cancel any active call requests from this patient
-                let requestsCancelled = 0;
                 for (const [requestId, request] of activeCallRequests.entries()) {
                     if (request.patientId === socket.userId) {
-                        console.log(`Cancelling call request ${requestId} due to patient disconnect`);
+                        console.log(`Cancelling call request ${requestId}`);
                         activeCallRequests.delete(requestId);
-                        requestsCancelled++;
                     }
                 }
-                
-                if (requestsCancelled > 0) {
-                    broadcastWaitingPatients();
-                }
+                broadcastWaitingPatients();
             }
 
             // End any active calls this user was in
@@ -471,13 +447,10 @@ io.on('connection', (socket) => {
                 }
             }
         }
-        
-        console.log('======================\n');
-        logState();
     });
 });
 
-// Enhanced broadcast functions with better error handling
+// Enhanced broadcast functions
 function broadcastOnlineDoctors() {
     const doctorsList = Array.from(onlineDoctors.values()).map(doctor => ({
         id: doctor.id,
@@ -486,24 +459,14 @@ function broadcastOnlineDoctors() {
         specialty: doctor.specialty || 'General'
     }));
     
-    console.log(`Broadcasting ${doctorsList.length} online doctors to ${onlinePatients.size} patients`);
-    
-    let patientsNotified = 0;
-    let patientsSkipped = 0;
-    
     onlinePatients.forEach((patient, patientId) => {
         const patientSocket = io.sockets.sockets.get(patient.socketId);
         if (patientSocket && patientSocket.connected) {
             patientSocket.emit('doctors-online', doctorsList);
-            patientsNotified++;
         } else {
-            console.log(`Patient ${patient.name} socket disconnected, removing from list`);
             onlinePatients.delete(patientId);
-            patientsSkipped++;
         }
     });
-    
-    console.log(`Doctor list broadcast: ${patientsNotified} patients notified, ${patientsSkipped} removed`);
 }
 
 function broadcastWaitingPatients() {
@@ -516,24 +479,14 @@ function broadcastWaitingPatients() {
             timestamp: req.timestamp
         }));
     
-    console.log(`Broadcasting ${waitingPatients.length} waiting patients to ${onlineDoctors.size} doctors`);
-    
-    let doctorsNotified = 0;
-    let doctorsSkipped = 0;
-    
     onlineDoctors.forEach((doctor, doctorId) => {
         const doctorSocket = io.sockets.sockets.get(doctor.socketId);
         if (doctorSocket && doctorSocket.connected) {
             doctorSocket.emit('waiting-patients', waitingPatients);
-            doctorsNotified++;
         } else {
-            console.log(`Doctor ${doctor.name} socket disconnected, removing from list`);
             onlineDoctors.delete(doctorId);
-            doctorsSkipped++;
         }
     });
-    
-    console.log(`Waiting patients broadcast: ${doctorsNotified} doctors notified, ${doctorsSkipped} removed`);
 }
 
 // ---------------- REST API Routes ----------------
@@ -682,60 +635,79 @@ app.get("/api/health", (req, res) => {
     res.json({ 
         message: "Server is running", 
         timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
         connectedSockets: connectedSockets,
         onlineDoctors: onlineDoctors.size,
         onlinePatients: onlinePatients.size,
         activeCalls: activeCalls.size,
-        activeRequests: activeCallRequests.size,
-        doctorsList: Array.from(onlineDoctors.values()).map(d => ({
-            id: d.id,
-            name: d.name,
-            socketId: d.socketId.substring(0, 8) + '...'
-        })),
-        patientsList: Array.from(onlinePatients.values()).map(p => ({
-            id: p.id,
-            name: p.name,
-            socketId: p.socketId.substring(0, 8) + '...'
-        }))
+        activeRequests: activeCallRequests.size
     });
 });
 
-// Test endpoint for cross-device debugging
-app.get("/api/debug", (req, res) => {
-    res.json({
-        timestamp: new Date().toISOString(),
-        server: {
-            connectedSockets: io.sockets.sockets.size,
-            onlineDoctors: onlineDoctors.size,
-            onlinePatients: onlinePatients.size
-        },
-        doctors: Array.from(onlineDoctors.entries()).map(([id, doc]) => ({
-            id,
-            name: doc.name,
-            socketId: doc.socketId,
-            joinedAt: new Date(doc.joinedAt).toISOString()
-        })),
-        patients: Array.from(onlinePatients.entries()).map(([id, patient]) => ({
-            id,
-            name: patient.name,
-            socketId: patient.socketId,
-            joinedAt: new Date(patient.joinedAt).toISOString()
-        })),
-        activeRequests: Array.from(activeCallRequests.entries()).map(([id, req]) => ({
-            requestId: id,
-            patientName: req.patientName,
-            status: req.status,
-            timestamp: new Date(req.timestamp).toISOString()
-        }))
+// Debug endpoint (only in non-production)
+if (process.env.NODE_ENV !== 'production') {
+    app.get("/api/debug", (req, res) => {
+        res.json({
+            timestamp: new Date().toISOString(),
+            server: {
+                connectedSockets: io.sockets.sockets.size,
+                onlineDoctors: onlineDoctors.size,
+                onlinePatients: onlinePatients.size
+            },
+            doctors: Array.from(onlineDoctors.entries()).map(([id, doc]) => ({
+                id,
+                name: doc.name,
+                socketId: doc.socketId,
+                joinedAt: new Date(doc.joinedAt).toISOString()
+            })),
+            patients: Array.from(onlinePatients.entries()).map(([id, patient]) => ({
+                id,
+                name: patient.name,
+                socketId: patient.socketId,
+                joinedAt: new Date(patient.joinedAt).toISOString()
+            })),
+            activeRequests: Array.from(activeCallRequests.entries()).map(([id, req]) => ({
+                requestId: id,
+                patientName: req.patientName,
+                status: req.status,
+                timestamp: new Date(req.timestamp).toISOString()
+            }))
+        });
+    });
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).json({ 
+        message: 'Internal server error',
+        ...(process.env.NODE_ENV !== 'production' && { error: err.message })
     });
 });
 
-// Start server with enhanced logging
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/api/health`);
-    console.log(`Debug endpoint: http://localhost:${PORT}/api/debug`);
-    console.log(`Socket.IO server initialized with CORS enabled`);
-    console.log(`Server accessible from other devices on your network`);
+// 404 handler
+app.use('*', (req, res) => {
+    res.status(404).json({ message: 'Route not found' });
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+        console.log('Process terminated');
+        mongoose.connection.close(false, () => {
+            console.log('MongoDB connection closed');
+            process.exit(0);
+        });
+    });
+});
+
+// Start server
+const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+server.listen(PORT, host, () => {
+    console.log(`🚀 Server running on ${host}:${PORT}`);
+    console.log(`🏥 Health check: http://${host}:${PORT}/api/health`);
+    console.log(`🔌 Socket.IO server initialized with CORS enabled`);
+    console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log('==========================================');
 });
