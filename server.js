@@ -11,11 +11,10 @@ const Patient = require("./models/Patient");
 const Doctor = require("./models/Doctor");
 
 // Connect to MongoDB using environment variable
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://tradeabhiyt_db_user:KDHHiZHhRsRrD6fN@aihealthmatecluster.ryau30r.mongodb.net/?retryWrites=true&w=majority&appName=AIHealthMateCluster";
 
 if (!MONGO_URI) {
     console.error("ERROR: MONGO_URI not found in environment variables");
-    console.error("Please set MONGO_URI in your Render environment variables");
     process.exit(1);
 }
 
@@ -43,25 +42,46 @@ const corsOptions = {
         'http://localhost:3000',
         'http://localhost:5173',
         /^https:\/\/.*\.render\.com$/,  // Allow any render.com subdomain
+        /^https:\/\/.*\.github\.io$/,   // Allow GitHub Pages
     ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     credentials: true
 };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
 
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
 // Socket.IO configuration with proper CORS for production
 const io = socketIo(server, {
     cors: corsOptions,
     allowEIO3: true,
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 const PORT = process.env.PORT || 5000;
 
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Add security headers
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization');
+    
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+    } else {
+        next();
+    }
+});
 
 // Add a basic route for health checks
 app.get('/', (req, res) => {
@@ -81,23 +101,25 @@ const activeCalls = new Map(); // roomId -> call info
 
 // Debug logging helper
 function logState() {
-    console.log('\n=== CURRENT STATE ===');
-    console.log('Online Doctors:', Array.from(onlineDoctors.entries()).map(([id, doc]) => ({
-        id,
-        name: doc.name,
-        socketId: doc.socketId.substring(0, 8) + '...'
-    })));
-    console.log('Online Patients:', Array.from(onlinePatients.entries()).map(([id, patient]) => ({
-        id,
-        name: patient.name,
-        socketId: patient.socketId.substring(0, 8) + '...'
-    })));
-    console.log('Active Call Requests:', Array.from(activeCallRequests.entries()).map(([id, req]) => ({
-        requestId: id,
-        patient: req.patientName,
-        status: req.status
-    })));
-    console.log('====================\n');
+    if (process.env.NODE_ENV !== 'production') {
+        console.log('\n=== CURRENT STATE ===');
+        console.log('Online Doctors:', Array.from(onlineDoctors.entries()).map(([id, doc]) => ({
+            id,
+            name: doc.name,
+            socketId: doc.socketId.substring(0, 8) + '...'
+        })));
+        console.log('Online Patients:', Array.from(onlinePatients.entries()).map(([id, patient]) => ({
+            id,
+            name: patient.name,
+            socketId: patient.socketId.substring(0, 8) + '...'
+        })));
+        console.log('Active Call Requests:', Array.from(activeCallRequests.entries()).map(([id, req]) => ({
+            requestId: id,
+            patient: req.patientName,
+            status: req.status
+        })));
+        console.log('====================\n');
+    }
 }
 
 // ---------------- Socket.IO Events ----------------
@@ -180,9 +202,7 @@ io.on('connection', (socket) => {
         broadcastWaitingPatients();
         
         // Log current state in development
-        if (process.env.NODE_ENV !== 'production') {
-            logState();
-        }
+        logState();
         
         // Confirm join to the user
         socket.emit('join-confirmed', {
