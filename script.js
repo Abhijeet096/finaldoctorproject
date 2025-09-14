@@ -48,7 +48,7 @@ function showNotification(message, type = "success") {
 // ------------------ Socket.IO Initialization ------------------
 function initializeSocket() {
     console.log('Initializing socket connection...');
-    socket = io('http://localhost:5000');
+    socket = io('https://api.render.com/deploy/srv-d32p3q6r433s73b8oolg?key=W_4qUz1IRmk');
     
     socket.on('connect', () => {
         console.log('Connected to server:', socket.id);
@@ -145,7 +145,7 @@ function initializeSocket() {
 
 // ------------------ Authentication ------------------
 
-const API_BASE = "http://localhost:5000/api/auth";
+const API_BASE = "https://api.render.com/deploy/srv-d32p3q6r433s73b8oolg?key=W_4qUz1IRmk";
 
 let userSession = {
     token: null,
