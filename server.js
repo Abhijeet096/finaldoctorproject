@@ -48,10 +48,12 @@ const PORT = process.env.PORT || 5000;
 
 
 // render url 
-
 const cors = require('cors');
+
 app.use(cors({
-  origin: ['https://abhijeet096.github.io/finaldoctorproject/'], // frontend URL
+  origin: [
+    'https://abhijeet096.github.io/finaldoctorproject/', // frontend on GitHub Pages
+  ],
   methods: ['GET','POST','PUT','DELETE'],
   credentials: true
 }));
