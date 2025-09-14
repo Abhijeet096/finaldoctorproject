@@ -46,6 +46,16 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 5000;
 
+
+// render url 
+
+const cors = require('cors');
+app.use(cors({
+  origin: ['https://abhijeet096.github.io/finaldoctorproject/'], // or '*' for testing
+  methods: ['GET','POST','PUT','DELETE'],
+  credentials: true
+}));
+
 // Enhanced CORS middleware
 app.use(cors({
     origin: "*",
