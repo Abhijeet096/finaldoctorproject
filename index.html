@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Health Mate - Your Digital Healthcare Companion</title>
 
+    <!-- back nevegation  -->
+    <!-- <script type="module" src="./js/navigation-fix.js"></script>   -->
+
     <!-- Add this in your HTML head -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     
@@ -15,7 +18,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="script.js"></script>
 </head>
 <body>
 
@@ -27,11 +29,11 @@
                 AI Health Mate
             </div>
             <ul class="nav-links">
-                <li><a onclick="showSection('home')">Home</a></li>
-                <li><a onclick="showSection('ai-chat')">AI Chat</a></li>
-                <li><a onclick="showSection('video-call')">Video Call</a></li>
-                <li><a onclick="showSection('doctor-login')" class="btn btn-outline">Doctor Login</a></li>
-                <li><a onclick="showSection('patient-login')" class="btn btn-primary">Patient Login</a></li>
+                <li><a href="#" onclick="showSection('home'); return false;">Home</a></li>
+                <li><a href="#" onclick="showSection('ai-chat'); return false;">AI Chat</a></li>
+                <li><a href="#" onclick="showSection('video-call'); return false;">Video Call</a></li>
+                <li><a href="#" onclick="showSection('doctor-login'); return false;" class="btn btn-outline">Doctor Login</a></li>
+                <li><a href="#" onclick="showSection('patient-login'); return false;" class="btn btn-primary">Patient Login</a></li>
             </ul>
         </div>
     </nav>
@@ -44,10 +46,10 @@
                     <h1>Your AI-Powered Healthcare Companion</h1>
                     <p>Experience the future of healthcare with AI Health Mate. Get instant symptom analysis, connect with doctors via video calls, and manage your health journey seamlessly.</p>
                     <div class="hero-buttons">
-                        <a onclick="showSection('ai-chat')" class="btn btn-primary">
+                        <a href="#" onclick="showSection('ai-chat'); return false;" class="btn btn-primary">
                             <i class="fas fa-robot"></i> Try AI Chat
                         </a>
-                        <a onclick="showSection('video-call')" class="btn btn-secondary">
+                        <a href="#" onclick="showSection('video-call'); return false;" class="btn btn-secondary">
                             <i class="fas fa-video"></i> Start Video Call
                         </a>
                     </div>
@@ -116,7 +118,7 @@
     <section id="ai-chat" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -152,7 +154,7 @@
     <section id="video-call" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -226,7 +228,7 @@
     <section id="doctor-login" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -259,17 +261,19 @@
                     </button>
                 </form>
                 <p style="text-align: center;">
-                    <a onclick="showDoctorSignup()" style="color: var(--primary-color); cursor: pointer;">Don't have an account? Sign up here</a>
+                    <a href="#" onclick="showDoctorSignup(); return false;" style="color: var(--primary-color); cursor: pointer;">Don't have an account? Sign up here</a>
                 </p>
             </div>
         </div>
     </section>
 
+    
+
     <!-- Patient Login Section -->
     <section id="patient-login" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -292,7 +296,7 @@
                     </button>
                 </form>
                 <p style="text-align: center;">
-                    <a onclick="showPatientSignup()" style="color: var(--primary-color); cursor: pointer;">New to AI Health Mate? Sign up here</a>
+                    <a href="#" onclick="showPatientSignup(); return false;" style="color: var(--primary-color); cursor: pointer;">New to AI Health Mate? Sign up here</a>
                 </p>
             </div>
         </div>
@@ -302,7 +306,7 @@
     <section id="patient-signup" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -334,7 +338,7 @@
                     </button>
                 </form>
                 <p style="text-align: center; margin-top: 1rem;">
-                    <a onclick="showSection('patient-login')" style="color: var(--primary-color); cursor: pointer;">
+                    <a href="#" onclick="showSection('patient-login'); return false;" style="color: var(--primary-color); cursor: pointer;">
                         Already have an account? Login here
                     </a>
                 </p>
@@ -346,7 +350,7 @@
     <section id="doctor-signup" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -391,7 +395,7 @@
                     </button>
                 </form>
                 <p style="text-align: center; margin-top: 1rem;">
-                    <a onclick="showSection('doctor-login')" style="color: var(--primary-color); cursor: pointer;">
+                    <a href="#" onclick="showSection('doctor-login'); return false;" style="color: var(--primary-color); cursor: pointer;">
                         Already have an account? Login here
                     </a>
                 </p>
@@ -403,7 +407,7 @@
     <section id="patient-dashboard" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -548,7 +552,7 @@
     <section id="doctor-dashboard" class="section">
         <div class="container">
             <!-- Back Button -->
-            <button class="back-button" onclick="goBack()">
+            <button class="back-button" onclick="handleBackButton(); return false;">
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
@@ -851,5 +855,94 @@
     <!-- Notification Container -->
     <div id="notification" class="notification"></div>
 
+    <!-- Load Script at the end -->
+    <script src="script.js"></script>
+
+    <script>
+        // Backup navigation function in case script.js fails to load
+        window.handleBackButton = function() {
+            console.log('Backup back button called');
+            
+            const currentSection = document.querySelector('.section.active')?.id || 'home';
+            console.log('Current section:', currentSection);
+            
+            let targetSection = 'home';
+            
+            // Simple logic for back navigation
+            switch(currentSection) {
+                case 'ai-chat':
+                case 'video-call':
+                    // Check if user is logged in by looking for user data in forms
+                    const patientName = document.getElementById('patientName');
+                    const doctorName = document.getElementById('doctorName');
+                    
+                    if (patientName && patientName.textContent !== 'Patient') {
+                        targetSection = 'patient-dashboard';
+                    } else if (doctorName && doctorName.textContent !== 'Dr. Smith') {
+                        targetSection = 'doctor-dashboard';
+                    } else {
+                        targetSection = 'home';
+                    }
+                    break;
+                    
+                case 'patient-dashboard':
+                case 'doctor-dashboard':
+                    targetSection = 'home';
+                    break;
+                    
+                case 'patient-signup':
+                    targetSection = 'patient-login';
+                    break;
+                    
+                case 'doctor-signup':
+                    targetSection = 'doctor-login';
+                    break;
+                    
+                default:
+                    targetSection = 'home';
+                    break;
+            }
+            
+            console.log('Navigating to:', targetSection);
+            
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+            
+            // Show target section
+            const target = document.getElementById(targetSection);
+            if (target) {
+                target.classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                console.log('Navigation successful to:', targetSection);
+            } else {
+                console.error('Target section not found:', targetSection);
+                // Fallback to home
+                const home = document.getElementById('home');
+                if (home) {
+                    home.classList.add('active');
+                }
+            }
+        };
+
+        // Alternative simple showSection function
+        window.showSection = window.showSection || function(sectionId) {
+            console.log('Simple showSection called for:', sectionId);
+            
+            document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+            
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                targetSection.classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                console.log('Section activated:', sectionId);
+            } else {
+                console.error('Section not found:', sectionId);
+            }
+        };
+
+        console.log('Backup navigation functions loaded');
+    </script>
+
 </body>
-</html>
+
+</html> 
