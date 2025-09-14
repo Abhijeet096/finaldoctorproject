@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Health Mate - Your Digital Healthcare Companion</title>
 
-    <!-- back nevegation  -->
-    <!-- <script type="module" src="./js/navigation-fix.js"></script>   -->
-
     <!-- Add this in your HTML head -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     
@@ -122,28 +119,71 @@
                 <i class="fas fa-arrow-left"></i> Back
             </button>
             
-            <h2 style="text-align: center; margin-bottom: 2rem;">AI Symptom Analysis</h2>
+            <h2 style="text-align: center; margin-bottom: 2rem;">
+                <i class="fas fa-robot"></i> AI Medical Consultation
+            </h2>
+            
+            <!-- Chat Status -->
+            <div id="chatStatus" style="text-align: center; margin-bottom: 1rem; padding: 0.5rem; background: var(--bg-light); border-radius: 0.5rem;">
+                <i class="fas fa-brain"></i> <span id="chatStatusText">Ready to start consultation</span>
+            </div>
+            
             <div class="chat-container">
                 <div class="chat-header">
                     <i class="fas fa-robot"></i>
                     <div>
-                        <h3>AI Health Assistant</h3>
-                        <p style="opacity: 0.8; margin: 0;">Tell me about your symptoms</p>
+                        <h3>Dr. AI - Medical Assistant</h3>
+                        <p style="opacity: 0.8; margin: 0;">Intelligent symptom analysis with follow-up questions</p>
+                    </div>
+                    <div style="margin-left: auto;">
+                        <span id="sessionInfo" style="font-size: 0.8rem; opacity: 0.7;"></span>
                     </div>
                 </div>
+                
                 <div class="chat-messages" id="chatMessages">
                     <div class="message ai">
                         <div class="message-content">
-                            <p>Hello! I'm your AI Health Assistant. Please describe your symptoms, and I'll provide a preliminary analysis. Remember, this is not a substitute for professional medical advice.</p>
+                            <p>Hello! I'm Dr. AI, your intelligent medical assistant. I'll help you analyze your symptoms by asking detailed questions, just like a real doctor would.</p>
+                            <p><strong>How it works:</strong></p>
+                            <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                <li>Describe your symptoms</li>
+                                <li>I'll ask follow-up questions</li>
+                                <li>After gathering enough information, I'll generate a treatment plan</li>
+                                <li>A licensed doctor will review and approve the prescription</li>
+                            </ul>
+                            <p style="color: #f59e0b; margin-top: 1rem;"><i class="fas fa-exclamation-triangle"></i> <em>This is for preliminary assessment only and is not a substitute for professional medical advice.</em></p>
                         </div>
                     </div>
                 </div>
+                
                 <div class="chat-input">
                     <div class="input-group">
-                        <input type="text" id="symptomInput" placeholder="Describe your symptoms..." onkeypress="handleChatKeyPress(event)">
-                        <button onclick="sendSymptomMessage()" class="btn btn-primary">
+                        <input type="text" id="symptomInput" placeholder="Describe your symptoms (e.g., 'I have a fever and headache')..." onkeypress="handleChatKeyPress(event)">
+                        <button onclick="sendSymptomMessage()" class="btn btn-primary" id="sendBtn">
                             <i class="fas fa-paper-plane"></i>
                         </button>
+                    </div>
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-light);">
+                        <i class="fas fa-lightbulb"></i> Be specific about your symptoms, duration, and severity for better analysis
+                    </div>
+                </div>
+            </div>
+                        
+            <!-- AI Features Info -->
+            <div style="margin-top: 2rem; padding: 1.5rem; background: white; border-radius: 1rem; box-shadow: var(--shadow);">
+                <h4><i class="fas fa-magic"></i> AI-Powered Features</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-top: 1rem;">
+                    <div style="padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
+                        <h5><i class="fas fa-comments"></i> Intelligent Follow-ups</h5>
+                        <p style="margin: 0.5rem 0; font-size: 0.9rem;">AI asks relevant medical questions based on your symptoms</p>
+                    </div>
+                    <div style="padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
+                        <h5><i class="fas fa-prescription-bottle-alt"></i> Smart Prescriptions</h5>
+                        <p style="margin: 0.5rem 0; font-size: 0.9rem;">Generates treatment plans reviewed by real doctors</p>
+                    </div>
+                    <div style="padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
+                        <h5><i class="fas fa-clock"></i> 24/7 Available</h5>
+                        <p style="margin: 0.5rem 0; font-size: 0.9rem;">Get instant preliminary assessment anytime</p>
                     </div>
                 </div>
             </div>
@@ -266,8 +306,6 @@
             </div>
         </div>
     </section>
-
-    
 
     <!-- Patient Login Section -->
     <section id="patient-login" class="section">
@@ -412,7 +450,7 @@
             </button>
             
             <h2>Welcome Back, <span id="patientName">Patient</span>!</h2>
-            <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your health journey from your personalized dashboard</p>
+            <p style="color: var(--text-light); margin-bottom: 3rem;">Your AI-powered health companion</p>
             
             <div class="dashboard-grid">
                 <div class="dashboard-card">
@@ -423,27 +461,41 @@
                             <div>Consultations</div>
                         </div>
                         <div class="stat">
-                            <div class="stat-number">5</div>
-                            <div>Prescriptions</div>
+                            <div class="stat-number" id="aiConsultationsCount">8</div>
+                            <div>AI Consultations</div>
                         </div>
                         <div class="stat">
-                            <div class="stat-number">98%</div>
-                            <div>Health Score</div>
+                            <div class="stat-number">5</div>
+                            <div>Prescriptions</div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="dashboard-card">
+                    <h3><i class="fas fa-robot"></i> AI Health Assistant</h3>
+                    <div style="margin: 1rem 0;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="width: 8px; height: 8px; background: var(--secondary-color); border-radius: 50%;"></div>
+                            <span style="font-size: 0.9rem;">24/7 Available</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                            <div style="width: 8px; height: 8px; background: var(--primary-color); border-radius: 50%;"></div>
+                            <span style="font-size: 0.9rem;">Instant Analysis</span>
+                        </div>
+                    </div>
+                    <button onclick="showSection('ai-chat')" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-robot"></i> Start AI Consultation
+                    </button>
+                </div>
+                
+                <div class="dashboard-card">
                     <h3><i class="fas fa-calendar-alt"></i> Quick Actions</h3>
                     <div style="display: flex; flex-direction: column; gap: 1rem;">
-                        <button onclick="showSection('ai-chat')" class="btn btn-primary">
-                            <i class="fas fa-robot"></i> Start AI Chat
-                        </button>
                         <button onclick="showSection('video-call')" class="btn btn-secondary">
                             <i class="fas fa-video"></i> Video Consultation
                         </button>
                         <button onclick="viewPrescriptions()" class="btn btn-outline">
-                            <i class="fas fa-prescription-bottle-alt"></i> View Prescriptions
+                            <i class="fas fa-prescription-bottle-alt"></i> My Prescriptions
                         </button>
                     </div>
                 </div>
@@ -455,13 +507,78 @@
                 <p style="color: var(--text-light); margin: 1rem 0;">Loading available doctors...</p>
             </div>
 
+            <!-- AI Consultation History -->
+            <div style="margin-top: 3rem;">
+                <h3><i class="fas fa-history"></i> Recent AI Consultations</h3>
+                <div style="background: white; border-radius: 1rem; padding: 1.5rem; box-shadow: var(--shadow); margin-top: 1rem;">
+                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong><i class="fas fa-robot"></i> AI Consultation - Fever Symptoms</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Prescription approved by Dr. Johnson</p>
+                            </div>
+                            <small style="color: var(--text-light);">2 hours ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong><i class="fas fa-robot"></i> AI Consultation - Headache Analysis</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Prescription under review</p>
+                            </div>
+                            <small style="color: var(--text-light);">5 hours ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item" style="padding: 1rem 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong><i class="fas fa-video"></i> Video Consultation</strong>
+                                <p style="color: var(--text-light); margin: 0.25rem 0;">Consultation with Dr. Smith</p>
+                            </div>
+                            <small style="color: var(--text-light);">1 day ago</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Prescriptions View -->
             <div id="prescriptionsView" style="display: none; margin-top: 3rem;">
-                <h3>Your Prescriptions</h3>
+                <h3><i class="fas fa-prescription-bottle-alt"></i> Your Prescriptions</h3>
+                
+                <!-- Sample AI-generated prescription -->
                 <div class="prescription-card" style="margin-top: 1rem;">
                     <div class="prescription-header">
-                        <h4>Prescription #001</h4>
-                        <small>Dr. Smith | January 20, 2025</small>
+                        <h4>AI Prescription #AI001</h4>
+                        <small>Dr. AI Analysis | Approved by Dr. Johnson | Today</small>
+                    </div>
+                    <div class="prescription-content">
+                        <p><strong>Symptoms Analyzed:</strong> Fever (101°F), headache, body aches lasting 2 days</p>
+                        <p><strong>AI Diagnosis:</strong> Viral fever with associated symptoms</p>
+                        <p><strong>Treatment Plan:</strong></p>
+                        <ul class="medication-list">
+                            <li><strong>Paracetamol 650mg</strong> - Every 6 hours for fever and pain</li>
+                            <li><strong>Rest</strong> - Complete bed rest for 3-4 days</li>
+                            <li><strong>Hydration</strong> - Increase fluid intake (water, ORS)</li>
+                            <li><strong>Monitor</strong> - Check temperature regularly, consult if fever persists >3 days</li>
+                        </ul>
+                        <div style="background: var(--bg-light); padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+                            <p style="margin: 0; font-size: 0.9rem; color: var(--text-dark);">
+                                <i class="fas fa-info-circle"></i> 
+                                <strong>AI Analysis:</strong> This prescription was generated by AI based on your symptoms 
+                                and reviewed by Dr. Johnson for accuracy and safety.
+                            </p>
+                        </div>
+                        <button onclick="downloadPrescription('AI001')" class="btn btn-primary">
+                            <i class="fas fa-download"></i> Download PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Traditional prescription -->
+                <div class="prescription-card" style="margin-top: 1rem;">
+                    <div class="prescription-header">
+                        <h4>Prescription #002</h4>
+                        <small>Dr. Smith | Video Consultation | January 20, 2025</small>
                     </div>
                     <div class="prescription-content">
                         <p><strong>Diagnosis:</strong> Common Cold</p>
@@ -470,71 +587,9 @@
                             <li>Rest for 2-3 days</li>
                             <li>Increase fluid intake</li>
                         </ul>
-                        <button onclick="downloadPrescription('001')" class="btn btn-outline">
+                        <button onclick="downloadPrescription('002')" class="btn btn-outline">
                             <i class="fas fa-download"></i> Download PDF
                         </button>
-                    </div>
-                </div>
-
-                <div class="prescription-card" style="margin-top: 1rem;">
-                    <div class="prescription-header">
-                        <h4>Patient: Sarah Wilson</h4>
-                        <small>AI Suggested Prescription | January 24, 2025</small>
-                    </div>
-                    <div class="prescription-content">
-                        <p><strong>Symptoms:</strong> Persistent cough, sore throat</p>
-                        <p><strong>AI Diagnosis:</strong> Upper respiratory tract infection</p>
-                        <p><strong>Suggested Medications:</strong></p>
-                        <ul class="medication-list">
-                            <li><strong>Amoxicillin 250mg</strong> - 3 times daily for 7 days</li>
-                            <li><strong>Cough syrup</strong> - 2 teaspoons before bed</li>
-                            <li><strong>Throat lozenges</strong> - As needed for sore throat</li>
-                        </ul>
-                        <div class="prescription-actions">
-                            <button onclick="approvePrescription('002')" class="btn btn-secondary">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button onclick="rejectPrescription('002')" class="btn btn-danger">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                            <button onclick="modifyPrescription('002')" class="btn btn-outline">
-                                <i class="fas fa-edit"></i> Modify
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent Activity -->
-            <div style="margin-top: 3rem;">
-                <h3><i class="fas fa-history"></i> Recent Activity</h3>
-                <div style="background: white; border-radius: 1rem; padding: 1.5rem; box-shadow: var(--shadow); margin-top: 1rem;">
-                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>AI Chat Session Completed</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Symptom analysis for headache</p>
-                            </div>
-                            <small style="color: var(--text-light);">2 hours ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>Prescription Downloaded</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Prescription #001 downloaded</p>
-                            </div>
-                            <small style="color: var(--text-light);">5 hours ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item" style="padding: 1rem 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>Account Created</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Welcome to AI Health Mate!</p>
-                            </div>
-                            <small style="color: var(--text-light);">1 day ago</small>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -557,7 +612,7 @@
             </button>
             
             <h2>Doctor Dashboard - <span id="doctorName">Dr. Smith</span></h2>
-            <p style="color: var(--text-light); margin-bottom: 3rem;">Manage your patients and approve prescriptions</p>
+            <p style="color: var(--text-light); margin-bottom: 3rem;">Manage patients and approve AI-generated prescriptions</p>
             
             <div class="dashboard-grid">
                 <div class="dashboard-card">
@@ -568,13 +623,26 @@
                             <div>Appointments</div>
                         </div>
                         <div class="stat">
-                            <div class="stat-number">3</div>
-                            <div>Pending Reviews</div>
+                            <div class="stat-number" id="pendingPrescriptionsCount">3</div>
+                            <div>Pending AI Reviews</div>
                         </div>
                         <div class="stat">
                             <div class="stat-number">12</div>
                             <div>Patients Today</div>
                         </div>
+                    </div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <h3><i class="fas fa-brain"></i> AI Integration Status</h3>
+                    <div style="display: flex; align-items: center; gap: 1rem; margin: 1rem 0;">
+                        <div style="width: 12px; height: 12px; background: var(--secondary-color); border-radius: 50%;"></div>
+                        <span>AI Assistant Active</span>
+                    </div>
+                    <div style="background: var(--bg-light); padding: 1rem; border-radius: 0.5rem; margin: 1rem 0;">
+                        <p style="margin: 0; font-size: 0.9rem; color: var(--text-light);">
+                            <i class="fas fa-info-circle"></i> AI consultations require your approval before prescriptions are issued
+                        </p>
                     </div>
                 </div>
                 
@@ -588,20 +656,6 @@
                         <i class="fas fa-power-off"></i> Go Offline
                     </button>
                 </div>
-                
-                <div class="dashboard-card">
-                    <h3><i class="fas fa-video"></i> Video Calls</h3>
-                    <div style="display: flex; flex-direction: column; gap: 1rem;">
-                        <button onclick="showSection('video-call')" class="btn btn-primary">
-                            <i class="fas fa-video"></i> Start Video Call
-                        </button>
-                        <div style="text-align: center; padding: 1rem; background: var(--bg-light); border-radius: 0.5rem;">
-                            <div id="connectionStatus" style="font-size: 0.9rem; color: var(--text-light);">
-                                <i class="fas fa-wifi"></i> Ready for calls
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Waiting Patients Section -->
@@ -610,198 +664,65 @@
                 <p style="color: var(--text-light); margin: 1rem 0;">No patients currently waiting for consultation.</p>
             </div>
 
+            <!-- AI Prescription Approvals Section -->
+            <div id="prescriptionApprovalsSection" style="margin-top: 3rem;">
+                <h3><i class="fas fa-robot"></i> AI-Generated Prescriptions Requiring Approval</h3>
+                <div style="background: var(--bg-light); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+                    <p style="margin: 0; color: var(--text-dark);">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>How it works:</strong> AI analyzes patient symptoms and generates treatment recommendations. 
+                        You review, modify if needed, and approve or reject each prescription.
+                    </p>
+                </div>
+                
+                <div id="pendingPrescriptionsContainer">
+                    <!-- AI-generated prescriptions will be dynamically added here -->
+                    <div class="prescription-card" style="margin-bottom: 1rem;">
+                        <div class="prescription-header">
+                            <h4>No Pending AI Prescriptions</h4>
+                            <small>AI-generated prescriptions will appear here for your review</small>
+                        </div>
+                        <div class="prescription-content">
+                            <p style="color: var(--text-light);">
+                                <i class="fas fa-clipboard-list"></i> When patients complete AI consultations, 
+                                their treatment plans will be sent here for your professional review and approval.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Actions -->
             <div style="margin-top: 3rem;">
                 <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
                 <div class="dashboard-grid" style="margin-top: 1.5rem;">
                     <div class="dashboard-card">
-                        <h4><i class="fas fa-prescription-bottle-alt"></i> Prescriptions</h4>
-                        <p style="color: var(--text-light); margin: 1rem 0;">Review and approve AI-generated prescriptions</p>
-                        <button class="btn btn-outline" style="width: 100%;">
-                            <i class="fas fa-eye"></i> Review Prescriptions
+                        <h4><i class="fas fa-video"></i> Video Consultations</h4>
+                        <p style="color: var(--text-light); margin: 1rem 0;">Connect with patients via secure video calls</p>
+                        <button onclick="showSection('video-call')" class="btn btn-primary" style="width: 100%;">
+                            <i class="fas fa-video"></i> Start Video Call
                         </button>
                     </div>
                     
                     <div class="dashboard-card">
-                        <h4><i class="fas fa-chart-bar"></i> Patient History</h4>
-                        <p style="color: var(--text-light); margin: 1rem 0;">View detailed patient medical records</p>
-                        <button class="btn btn-outline" style="width: 100%;">
-                            <i class="fas fa-folder-open"></i> View Records
+                        <h4><i class="fas fa-chart-bar"></i> AI Analytics</h4>
+                        <p style="color: var(--text-light); margin: 1rem 0;">View AI consultation statistics and accuracy</p>
+                        <button onclick="viewAIAnalytics()" class="btn btn-outline" style="width: 100%;">
+                            <i class="fas fa-chart-line"></i> View Analytics
                         </button>
                     </div>
                     
                     <div class="dashboard-card">
-                        <h4><i class="fas fa-calendar-alt"></i> Schedule</h4>
-                        <p style="color: var(--text-light); margin: 1rem 0;">Manage your appointments and availability</p>
-                        <button class="btn btn-outline" style="width: 100%;">
-                            <i class="fas fa-calendar"></i> View Schedule
+                        <h4><i class="fas fa-cog"></i> AI Settings</h4>
+                        <p style="color: var(--text-light); margin: 1rem 0;">Configure AI consultation preferences</p>
+                        <button onclick="configureAI()" class="btn btn-outline" style="width: 100%;">
+                            <i class="fas fa-cog"></i> Configure
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Pending Prescription Approvals -->
-            <div style="margin-top: 3rem;">
-                <h3><i class="fas fa-clipboard-check"></i> Pending Prescription Approvals</h3>
-                <div class="prescription-card" style="margin-top: 1rem;">
-                    <div class="prescription-header">
-                        <h4>Patient: John Doe</h4>
-                        <small>AI Suggested Prescription | January 25, 2025</small>
-                    </div>
-                    <div class="prescription-content">
-                        <p><strong>Symptoms:</strong> Headache, fever, body aches</p>
-                        <p><strong>AI Diagnosis:</strong> Viral infection</p>
-                        <p><strong>Suggested Medications:</strong></p>
-                        <ul class="medication-list">
-                            <li><strong>Paracetamol 500mg</strong> - Every 6 hours for pain/fever</li>
-                            <li><strong>Rest</strong> - 2-3 days bed rest</li>
-                            <li><strong>Fluids</strong> - Increase water intake</li>
-                        </ul>
-                        <div class="prescription-actions">
-                            <button onclick="approvePrescription('001')" class="btn btn-secondary">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button onclick="rejectPrescription('001')" class="btn btn-danger">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                            <button onclick="modifyPrescription('001')" class="btn btn-outline">
-                                <i class="fas fa-edit"></i> Modify
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="prescription-card" style="margin-top: 1rem;">
-                    <div class="prescription-header">
-                        <h4>Patient: Sarah Wilson</h4>
-                        <small>AI Suggested Prescription | January 24, 2025</small>
-                    </div>
-                    <div class="prescription-content">
-                        <p><strong>Symptoms:</strong> Persistent cough, sore throat</p>
-                        <p><strong>AI Diagnosis:</strong> Upper respiratory tract infection</p>
-                        <p><strong>Suggested Medications:</strong></p>
-                        <ul class="medication-list">
-                            <li><strong>Amoxicillin 250mg</strong> - 3 times daily for 7 days</li>
-                            <li><strong>Cough syrup</strong> - 2 teaspoons before bed</li>
-                            <li><strong>Throat lozenges</strong> - As needed for sore throat</li>
-                        </ul>
-                        <div class="prescription-actions">
-                            <button onclick="approvePrescription('002')" class="btn btn-secondary">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button onclick="rejectPrescription('002')" class="btn btn-danger">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                            <button onclick="modifyPrescription('002')" class="btn btn-outline">
-                                <i class="fas fa-edit"></i> Modify
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="prescription-card" style="margin-top: 1rem;">
-                    <div class="prescription-header">
-                        <h4>Patient: Michael Chen</h4>
-                        <small>AI Suggested Prescription | January 23, 2025</small>
-                    </div>
-                    <div class="prescription-content">
-                        <p><strong>Symptoms:</strong> Stomach pain, nausea, bloating</p>
-                        <p><strong>AI Diagnosis:</strong> Gastritis</p>
-                        <p><strong>Suggested Medications:</strong></p>
-                        <ul class="medication-list">
-                            <li><strong>Omeprazole 20mg</strong> - Once daily before breakfast</li>
-                            <li><strong>Simethicone 40mg</strong> - After meals for bloating</li>
-                            <li><strong>Dietary changes</strong> - Avoid spicy and acidic foods</li>
-                        </ul>
-                        <div class="prescription-actions">
-                            <button onclick="approvePrescription('003')" class="btn btn-secondary">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button onclick="rejectPrescription('003')" class="btn btn-danger">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                            <button onclick="modifyPrescription('003')" class="btn btn-outline">
-                                <i class="fas fa-edit"></i> Modify
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Patient Records Summary -->
-            <div style="margin-top: 3rem;">
-                <h3><i class="fas fa-folder-medical"></i> Patient Records Summary</h3>
-                <div style="background: white; border-radius: 1rem; padding: 1.5rem; box-shadow: var(--shadow); margin-top: 1rem;">
-                    <div class="dashboard-grid">
-                        <div class="dashboard-card" style="margin: 0; background: var(--bg-light);">
-                            <h5><i class="fas fa-users"></i> Total Patients</h5>
-                            <div class="stat-number" style="color: var(--primary-color); font-size: 2rem;">156</div>
-                        </div>
-                        <div class="dashboard-card" style="margin: 0; background: var(--bg-light);">
-                            <h5><i class="fas fa-calendar-check"></i> This Month</h5>
-                            <div class="stat-number" style="color: var(--secondary-color); font-size: 2rem;">23</div>
-                        </div>
-                        <div class="dashboard-card" style="margin: 0; background: var(--bg-light);">
-                            <h5><i class="fas fa-clock"></i> Avg. Consultation</h5>
-                            <div class="stat-number" style="color: var(--accent-color); font-size: 2rem;">18min</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent Activity -->
-            <div style="margin-top: 3rem;">
-                <h3><i class="fas fa-history"></i> Recent Activity</h3>
-                <div style="background: white; border-radius: 1rem; padding: 1.5rem; box-shadow: var(--shadow); margin-top: 1rem;">
-                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>Video consultation completed</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: Mike Johnson</p>
-                            </div>
-                            <small style="color: var(--text-light);">2 hours ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>Prescription approved</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: Emily Davis</p>
-                            </div>
-                            <small style="color: var(--text-light);">5 hours ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>Emergency consultation</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: David Wilson - Chest pain</p>
-                            </div>
-                            <small style="color: var(--text-light);">8 hours ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item" style="padding: 1rem 0; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>Prescription modified</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: Lisa Anderson - Diabetes medication</p>
-                            </div>
-                            <small style="color: var(--text-light);">12 hours ago</small>
-                        </div>
-                    </div>
-                    <div class="activity-item" style="padding: 1rem 0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <strong>New patient registered</strong>
-                                <p style="color: var(--text-light); margin: 0.25rem 0;">Patient: Robert Brown</p>
-                            </div>
-                            <small style="color: var(--text-light);">1 day ago</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Doctor Analytics -->
+            <!-- Doctor Analytics with AI Metrics -->
             <div style="margin-top: 3rem;">
                 <h3><i class="fas fa-chart-line"></i> Performance Analytics</h3>
                 <div class="dashboard-grid" style="margin-top: 1.5rem;">
@@ -809,31 +730,18 @@
                         <h5><i class="fas fa-star"></i> Patient Satisfaction</h5>
                         <div class="stat-number" style="color: var(--secondary-color); font-size: 2.5rem;">4.9/5</div>
                         <p style="color: var(--text-light); margin: 0.5rem 0;">Based on 89 reviews</p>
-                        <div style="background: var(--bg-light); padding: 0.5rem; border-radius: 0.5rem;">
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                        </div>
                     </div>
                     
                     <div class="dashboard-card">
-                        <h5><i class="fas fa-clock"></i> Response Time</h5>
-                        <div class="stat-number" style="color: var(--primary-color); font-size: 2.5rem;">3.2min</div>
-                        <p style="color: var(--text-light); margin: 0.5rem 0;">Average response time</p>
-                        <div style="background: var(--bg-light); padding: 0.5rem; border-radius: 0.5rem; color: var(--secondary-color);">
-                            <i class="fas fa-arrow-down"></i> 15% faster than last month
-                        </div>
+                        <h5><i class="fas fa-robot"></i> AI Accuracy</h5>
+                        <div class="stat-number" style="color: var(--primary-color); font-size: 2.5rem;">94%</div>
+                        <p style="color: var(--text-light); margin: 0.5rem 0;">AI prescriptions approved</p>
                     </div>
                     
                     <div class="dashboard-card">
-                        <h5><i class="fas fa-check-circle"></i> Success Rate</h5>
-                        <div class="stat-number" style="color: var(--secondary-color); font-size: 2.5rem;">96%</div>
-                        <p style="color: var(--text-light); margin: 0.5rem 0;">Successful diagnoses</p>
-                        <div style="background: var(--bg-light); padding: 0.5rem; border-radius: 0.5rem; color: var(--secondary-color);">
-                            <i class="fas fa-trophy"></i> Top 10% performers
-                        </div>
+                        <h5><i class="fas fa-clock"></i> Avg Review Time</h5>
+                        <div class="stat-number" style="color: var(--accent-color); font-size: 2.5rem;">2.1min</div>
+                        <p style="color: var(--text-light); margin: 0.5rem 0;">Per AI prescription review</p>
                     </div>
                 </div>
             </div>
@@ -846,6 +754,38 @@
             </div>
         </div>
     </section>
+
+    <!-- Prescription Edit Modal (for doctors) -->
+    <div id="prescriptionEditModal" class="prescription-edit-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Modify AI-Generated Prescription</h3>
+                <button onclick="closePrescriptionModal()" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-weight: bold; color: var(--text-dark);">Patient Information:</label>
+                    <div id="modalPatientInfo" style="background: var(--bg-light); padding: 1rem; border-radius: 0.5rem; margin-top: 0.5rem;"></div>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label style="font-weight: bold; color: var(--text-dark);">AI Consultation Summary:</label>
+                    <div id="modalConsultationSummary" style="background: var(--bg-light); padding: 1rem; border-radius: 0.5rem; margin-top: 0.5rem; max-height: 150px; overflow-y: auto;"></div>
+                </div>
+                <div>
+                    <label for="prescriptionEdit" style="font-weight: bold; color: var(--text-dark);">Prescription Content:</label>
+                    <textarea id="prescriptionEdit" rows="12" style="width: 100%; margin-top: 0.5rem; padding: 1rem; border: 2px solid var(--border-color); border-radius: 0.5rem; font-family: inherit;" placeholder="Edit the prescription content..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="savePrescriptionModification()" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Approve with Changes
+                </button>
+                <button onclick="closePrescriptionModal()" class="btn btn-outline">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Dark Mode Toggle -->
     <button class="dark-mode-toggle" onclick="toggleDarkMode()" id="darkModeBtn">
@@ -943,6 +883,138 @@
         console.log('Backup navigation functions loaded');
     </script>
 
-</body>
+    <style>
+    /* Additional CSS for AI features */
+    .prescription-edit-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+    }
 
-</html> 
+    .modal-content {
+        background: white;
+        border-radius: 1rem;
+        max-width: 800px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: var(--shadow-lg);
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justifyDiego-content: space-between;
+        align-items: center;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .modal-footer {
+        padding: 1.5rem;
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+    }
+
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-light);
+    }
+
+    .close-btn:hover {
+        color: var(--text-dark);
+    }
+
+    .typing-dots {
+        animation: typing 1.5s infinite;
+    }
+
+    @keyframes typing {
+        0%, 20% { content: ''; }
+        40% { content: '.'; }
+        60% { content: '..'; }
+        80%, 100% { content: '...'; }
+    }
+
+    .chat-status {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .chat-status.active {
+        background: var(--secondary-color);
+        color: white;
+    }
+
+    .chat-status.processing {
+        background: var(--accent-color);
+        color: white;
+    }
+
+    .chat-status.ready {
+        background: var(--bg-light);
+        color: var(--text-dark);
+    }
+
+    .prescription-approved {
+        background: var(--bg-light);
+        border: 2px solid var(--secondary-color);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+
+    .prescription-approved h4 {
+        color: var(--secondary-color);
+        margin-bottom: 0.5rem;
+    }
+
+    .approval-status {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: var(--secondary-color);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .modal-content {
+            width: 95%;
+            margin: 1rem;
+        }
+        
+        .modal-footer {
+            flex-direction: column;
+        }
+        
+        .modal-footer button {
+            width: 100%;
+        }
+    }
+    </style>
+
+</body>
+</html>
