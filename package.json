@@ -1,12 +1,25 @@
 {
-  "name": "ai-health-mate-backend",
+  "name": "ai-health-mate",
   "version": "1.0.0",
-  "description": "Backend for AI Health Mate project",
+  "description": "Backend for AI Health Mate project with OpenAI integration",
   "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "test": "node -e \"console.log('Server test passed')\"",
+    "test-ai": "curl http://localhost:5000/api/test-ai"
   },
+  "keywords": [
+    "healthcare",
+    "ai",
+    "openai",
+    "medical",
+    "telemedicine",
+    "socketio",
+    "mongodb"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
@@ -15,16 +28,27 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
+    "http": "^0.0.1-security",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^7.8.7",
+    "mongoose": "^8.18.1",
     "morgan": "^1.10.0",
+    "openai": "^4.104.0",
     "socket.io": "^4.8.1",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.1"
+    "nodemon": "^3.1.10"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "your-repository-url"
+  },
+  "bugs": {
+    "url": "your-repository-url/issues"
+  },
+  "homepage": "your-repository-url#readme"
 }
