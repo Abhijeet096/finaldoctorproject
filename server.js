@@ -111,6 +111,64 @@ const MEDICAL_QUESTIONS = {
     ]
 };
 
+// Predefined prescriptions for fallback
+const PREDEFINED_PRESCRIPTIONS = {
+    fever: `
+Patient Symptoms Summary: Fever with possible associated symptoms.
+Preliminary AI Diagnosis: Likely viral infection or common cold.
+Suggested Medications: 
+- Paracetamol 500mg every 6-8 hours as needed for fever.
+- Ibuprofen 400mg every 8 hours if inflammation present.
+Care Instructions: Rest, stay hydrated, monitor temperature.
+Duration of Treatment: 3-5 days.
+Follow-up Recommendations: If fever persists beyond 3 days or worsens, consult a doctor immediately.
+Disclaimer: This is not a substitute for professional medical advice.`,
+    headache: `
+Patient Symptoms Summary: Headache with possible associated pain levels.
+Preliminary AI Diagnosis: Possible tension headache or migraine.
+Suggested Medications: 
+- Acetaminophen 650mg every 6 hours.
+- Sumatriptan 50mg if migraine suspected.
+Care Instructions: Avoid triggers, rest in dark room, hydrate.
+Duration of Treatment: As needed, up to 3 days.
+Follow-up Recommendations: If persistent or severe, seek medical attention.`,
+    cough: `
+Patient Symptoms Summary: Cough with possible phlegm or breathing issues.
+Preliminary AI Diagnosis: Possible upper respiratory infection.
+Suggested Medications: 
+- Dextromethorphan syrup 15mg every 6 hours for dry cough.
+- Guaifenesin 400mg every 4 hours if productive.
+Care Instructions: Stay hydrated, use humidifier, avoid smoke.
+Duration of Treatment: 5-7 days.
+Follow-up Recommendations: If shortness of breath, see doctor urgently.`,
+    "stomach pain": `
+Patient Symptoms Summary: Stomach pain with possible digestive changes.
+Preliminary AI Diagnosis: Possible gastritis or indigestion.
+Suggested Medications: 
+- Antacid (e.g., Maalox) 15ml every 4 hours.
+- Omeprazole 20mg once daily.
+Care Instructions: Eat small meals, avoid spicy foods.
+Duration of Treatment: 7 days.
+Follow-up Recommendations: If pain worsens or vomiting occurs, consult doctor.`,
+    "chest pain": `
+Patient Symptoms Summary: Chest pain with possible breathing issues.
+Preliminary AI Diagnosis: Possible musculoskeletal pain or anxiety-related.
+Suggested Medications: 
+- Ibuprofen 400mg every 8 hours.
+- If anxiety, consider relaxation techniques.
+Care Instructions: Rest, monitor symptoms closely.
+Duration of Treatment: 3 days.
+Follow-up Recommendations: Immediate medical attention if pain radiates or worsens.`,
+    default: `
+Patient Symptoms Summary: General symptoms described.
+Preliminary AI Diagnosis: Undetermined - requires further assessment.
+Suggested Medications: 
+- Over-the-counter pain reliever as needed.
+Care Instructions: Rest and monitor symptoms.
+Duration of Treatment: Until symptoms resolve.
+Follow-up Recommendations: Consult a healthcare professional promptly.`
+};
+
 // Medical AI System Prompt
 const MEDICAL_SYSTEM_PROMPT = `You are Dr. AI, a professional medical AI assistant for initial symptom assessment. Your role is to:
 
@@ -146,6 +204,43 @@ function logState() {
     console.log('Active Chat Sessions:', chatSessions.size);
     console.log('Pending Prescriptions:', pendingPrescriptions.size);
     console.log('====================\n');
+}
+
+// Fallback rule-based response generator
+function getRuleBasedResponse(session, userMessage) {
+    if (!session.currentSymptom) {
+        // Detect symptom from user message
+        const lowerMessage = userMessage.toLowerCase();
+        let detectedSymptom = 'default';
+        Object.keys(MEDICAL_QUESTIONS).forEach(key => {
+            if (lowerMessage.includes(key)) {
+                detectedSymptom = key;
+            }
+        });
+        session.currentSymptom = detectedSymptom;
+        session.questionIndex = 0;
+        session.answers = [];
+    }
+
+    if (session.questionIndex < MEDICAL_QUESTIONS[session.currentSymptom].length) {
+        const question = MEDICAL_QUESTIONS[session.currentSymptom][session.questionIndex];
+        session.questionIndex++;
+        return `Thank you for sharing. ${question} Remember, this is for initial assessment only - please consult a doctor for proper diagnosis.`;
+    } else {
+        // Enough questions asked, provide assessment
+        session.messageCount += 2; // Simulate
+        if (!session.prescriptionGenerated) {
+            setTimeout(() => generateMedicalPrescription(session.sessionId, true), 2000); // Use fallback
+            session.prescriptionGenerated = true;
+        }
+        return "Based on your responses, I've gathered enough information for a preliminary assessment. I'll prepare a treatment suggestion shortly, which will be reviewed by a doctor. In the meantime, if symptoms worsen, seek immediate medical help.";
+    }
+}
+
+// Fallback rule-based prescription
+function getRuleBasedPrescription(session) {
+    const symptom = session.currentSymptom || 'default';
+    return PREDEFINED_PRESCRIPTIONS[symptom];
 }
 
 // AI Chat Helper Functions
@@ -196,7 +291,20 @@ async function generateAIResponse(sessionId, userMessage, chatHistory) {
     } catch (error) {
         console.error('OpenAI API Error:', error);
         
-        // Fallback responses
+        // Fallback to rule-based
+        const session = chatSessions.get(sessionId);
+        if (session) {
+            const fallbackResponse = getRuleBasedResponse(session, userMessage);
+            session.messageCount += 2;
+            session.lastActivity = Date.now();
+            if (session.messageCount >= 6 && !session.prescriptionGenerated) {
+                setTimeout(() => generateMedicalPrescription(sessionId, true), 2000); // Fallback mode
+                session.prescriptionGenerated = true;
+            }
+            return fallbackResponse;
+        }
+        
+        // General fallback responses
         if (error.code === 'insufficient_quota' || error.status === 429) {
             return "I apologize, but I'm experiencing high demand right now. Please try again in a moment, or consider connecting with one of our available doctors for immediate assistance.";
         }
@@ -205,7 +313,7 @@ async function generateAIResponse(sessionId, userMessage, chatHistory) {
     }
 }
 
-async function generateMedicalPrescription(sessionId) {
+async function generateMedicalPrescription(sessionId, useFallback = false) {
     try {
         const session = chatSessions.get(sessionId);
         if (!session || !session.chatHistory || session.chatHistory.length < 4) {
@@ -215,12 +323,16 @@ async function generateMedicalPrescription(sessionId) {
 
         console.log(`📋 Generating medical prescription for session ${sessionId}`);
 
-        // Create conversation summary for prescription
-        const conversationSummary = session.chatHistory
-            .map(msg => `${msg.sender.toUpperCase()}: ${msg.content}`)
-            .join('\n');
+        let prescriptionContent;
+        if (useFallback) {
+            prescriptionContent = getRuleBasedPrescription(session);
+        } else {
+            // Create conversation summary for prescription
+            const conversationSummary = session.chatHistory
+                .map(msg => `${msg.sender.toUpperCase()}: ${msg.content}`)
+                .join('\n');
 
-        const prescriptionPrompt = `Based on the following medical consultation, generate a detailed medical prescription format. Include preliminary diagnosis, recommended medications (with dosages), and general care instructions. Remember this is AI-suggested and requires doctor approval.
+            const prescriptionPrompt = `Based on the following medical consultation, generate a detailed medical prescription format. Include preliminary diagnosis, recommended medications (with dosages), and general care instructions. Remember this is AI-suggested and requires doctor approval.
 
 Consultation Summary:
 ${conversationSummary}
@@ -235,20 +347,21 @@ Generate a professional medical prescription format with:
 
 Format as a structured prescription that a doctor can review and approve.`;
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                { 
-                    role: 'system', 
-                    content: 'You are a medical AI creating prescription suggestions for doctor review. Be thorough, professional, and include appropriate disclaimers.' 
-                },
-                { role: 'user', content: prescriptionPrompt }
-            ],
-            max_tokens: 500,
-            temperature: 0.3,
-        });
+            const completion = await openai.chat.completions.create({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    { 
+                        role: 'system', 
+                        content: 'You are a medical AI creating prescription suggestions for doctor review. Be thorough, professional, and include appropriate disclaimers.' 
+                    },
+                    { role: 'user', content: prescriptionPrompt }
+                ],
+                max_tokens: 500,
+                temperature: 0.3,
+            });
 
-        const prescriptionContent = completion.choices[0].message.content.trim();
+            prescriptionContent = completion.choices[0].message.content.trim();
+        }
         
         // Create prescription record
         const prescriptionId = `presc_${sessionId}_${Date.now()}`;
@@ -261,7 +374,7 @@ Format as a structured prescription that a doctor can review and approve.`;
             status: 'pending_approval',
             createdAt: Date.now(),
             aiGenerated: true,
-            conversationSummary: conversationSummary
+            conversationSummary: session.chatHistory.map(msg => `${msg.sender.toUpperCase()}: ${msg.content}`).join('\n')
         };
 
         pendingPrescriptions.set(prescriptionId, prescriptionData);
@@ -295,6 +408,10 @@ Format as a structured prescription that a doctor can review and approve.`;
 
     } catch (error) {
         console.error('Error generating prescription:', error);
+        // If not fallback and error, retry with fallback
+        if (!useFallback) {
+            generateMedicalPrescription(sessionId, true);
+        }
     }
 }
 
@@ -440,7 +557,10 @@ io.on('connection', (socket) => {
             messageCount: 0,
             startTime: Date.now(),
             lastActivity: Date.now(),
-            prescriptionGenerated: false
+            prescriptionGenerated: false,
+            currentSymptom: null,
+            questionIndex: 0,
+            answers: []
         };
         
         chatSessions.set(sessionId, chatSession);
@@ -472,6 +592,7 @@ io.on('connection', (socket) => {
             timestamp: Date.now()
         };
         session.chatHistory.push(userMessage);
+        session.answers.push(message); // For fallback
 
         // Generate AI response
         const aiResponse = await generateAIResponse(sessionId, message, session.chatHistory);
@@ -518,19 +639,16 @@ io.on('connection', (socket) => {
         }
 
         // Notify patient
-        const patientSocket = io.sockets.sockets.get(prescription.patientId);
-        if (patientSocket) {
-            const patientSocketActual = Array.from(io.sockets.sockets.values())
-                .find(s => s.userId === prescription.patientId);
-            
-            if (patientSocketActual) {
-                patientSocketActual.emit('prescription-approved', {
-                    prescriptionId,
-                    doctorName,
-                    content: prescription.finalContent,
-                    message: `Your prescription has been approved by Dr. ${doctorName}`
-                });
-            }
+        const patientSocketActual = Array.from(io.sockets.sockets.values())
+            .find(s => s.userId === prescription.patientId);
+        
+        if (patientSocketActual) {
+            patientSocketActual.emit('prescription-approved', {
+                prescriptionId,
+                doctorName,
+                content: prescription.finalContent,
+                message: `Your prescription has been approved by Dr. ${doctorName}. You can now download it from your dashboard.`
+            });
         }
 
         socket.emit('prescription-approved-confirm', { prescriptionId });
@@ -1030,7 +1148,10 @@ app.post("/api/ai-chat", async (req, res) => {
                 messageCount: 0,
                 startTime: Date.now(),
                 lastActivity: Date.now(),
-                prescriptionGenerated: false
+                prescriptionGenerated: false,
+                currentSymptom: null,
+                questionIndex: 0,
+                answers: []
             };
             chatSessions.set(newSessionId, session);
         }
@@ -1047,6 +1168,7 @@ app.post("/api/ai-chat", async (req, res) => {
             { sender: 'user', content: message, timestamp: Date.now() },
             { sender: 'ai', content: aiResponse, timestamp: Date.now() }
         );
+        session.answers.push(message);
 
         res.json({
             sessionId: session.sessionId,
